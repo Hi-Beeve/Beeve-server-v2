@@ -1,0 +1,136 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Member 모델
+model Member {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String?
+  name          String?
+  nickname      String?
+  phone         String?
+  birthDate     DateTime?
+  gender        Gender?
+  profileImage  String?
+  provider      AuthProvider @default(LOCAL)
+  providerId    String?
+  refreshToken  String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  fitnessRecords FitnessRecord[]
+  exercisePlans  ExercisePlan[]
+
+  @@map("members")
+}
+
+// 체력측정 기록
+model FitnessRecord {
+  id            String   @id @default(uuid())
+  memberId      String
+  member        Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  // 신체 정보
+  height        Float?   // cm
+  weight        Float?   // kg
+  bmi           Float?
+
+  // 체력 측정 데이터
+  cardioEndurance   Float?  // 심폐지구력
+  muscleStrength    Float?  // 근력
+  muscleEndurance   Float?  // 근지구력
+  flexibility       Float?  // 유연성
+  balance           Float?  // 균형감각
+  agility           Float?  // 민첩성
+
+  measuredAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("fitness_records")
+}
+
+// 운동 계획
+model ExercisePlan {
+  id            String   @id @default(uuid())
+  memberId      String
+  member        Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  title         String
+  description   String?
+  difficulty    Difficulty @default(BEGINNER)
+  duration      Int      // 분 단위
+  calories      Int?     // 예상 소모 칼로리
+
+  exercises     Exercise[]
+
+  isActive      Boolean  @default(true)
+  startDate     DateTime?
+  endDate       DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("exercise_plans")
+}
+
+// 개별 운동
+model Exercise {
+  id            String   @id @default(uuid())
+  planId        String
+  plan          ExercisePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  name          String
+  description   String?
+  category      ExerciseCategory
+  sets          Int?
+  reps          Int?
+  duration      Int?     // 초 단위
+  restTime      Int?     // 초 단위
+  orderIndex    Int      @default(0)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("exercises")
+}
+
+// Enums
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  KAKAO
+  APPLE
+}
+
+enum Difficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum ExerciseCategory {
+  CARDIO
+  STRENGTH
+  FLEXIBILITY
+  BALANCE
+  HIIT
+  YOGA
+  PILATES
+  OTHER
+}
