@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from './config';
 import { PrismaModule } from './prisma';
+import { RedisModule } from './redis';
 import { AuthModule } from './auth';
 import { MembersModule } from './members';
 import { FitnessModule } from './fitness';
@@ -13,6 +14,7 @@ import { JwtAuthGuard } from './common/guards';
   imports: [
     ConfigModule,
     PrismaModule,
+    RedisModule,
     AuthModule,
     MembersModule,
     FitnessModule,

@@ -17,10 +17,10 @@ export class MembersController {
   constructor(private membersService: MembersService) {}
 
   @Get('me')
-  @ApiOperation({ summary: 'Get current user profile' })
-  @ApiResponse({ status: 200, description: 'Returns user profile' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  getProfile(@CurrentUser('id') userId: string) {
-    return this.membersService.getProfile(userId);
+  @ApiOperation({ summary: '내 프로필 조회' })
+  @ApiResponse({ status: 200, description: '프로필 조회 성공' })
+  @ApiResponse({ status: 401, description: '인증 실패' })
+  getProfile(@CurrentUser('sub') memberId: bigint) {
+    return this.membersService.getProfile(memberId);
   }
 }

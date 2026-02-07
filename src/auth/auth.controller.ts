@@ -13,70 +13,120 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto, TokensDto } from './dto';
+import {
+  SendCodeDto,
+  VerifyCodeDto,
+  SignupDto,
+  LoginDto,
+  RefreshTokenDto,
+  LogoutDto,
+} from './dto';
 import { Public, CurrentUser } from '../common/decorators';
-import { JwtAuthGuard, JwtRefreshGuard } from '../common/guards';
+import { JwtAuthGuard } from '../common/guards';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private readonly authService: AuthService) {}
 
-  @Post('register')
+  /**
+   * 휴대폰 인증번호 발송
+   */
+  @Post('phone/send-code')
   @Public()
-  @ApiOperation({ summary: 'Register a new user' })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '휴대폰 인증번호 발송' })
   @ApiResponse({
-    status: 201,
-    description: 'User registered successfully',
-    type: TokensDto,
+    status: 200,
+    description: '인증번호 발송 성공',
   })
-  @ApiResponse({ status: 409, description: 'Email already exists' })
-  register(@Body() registerDto: RegisterDto): Promise<TokensDto> {
-    return this.authService.register(registerDto);
+  @ApiResponse({ status: 400, description: '잘못된 요청' })
+  sendCode(@Body() dto: SendCodeDto) {
+    return this.authService.sendVerificationCode(dto);
   }
 
+  /**
+   * 휴대폰 인증번호 확인
+   */
+  @Post('phone/verify-code')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '휴대폰 인증번호 확인' })
+  @ApiResponse({
+    status: 200,
+    description: '인증 성공',
+  })
+  @ApiResponse({ status: 400, description: '인증 실패' })
+  verifyCode(@Body() dto: VerifyCodeDto) {
+    return this.authService.verifyCode(dto);
+  }
+
+  /**
+   * 회원가입
+   */
+  @Post('signup')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '회원가입' })
+  @ApiResponse({
+    status: 200,
+    description: '회원가입 성공',
+  })
+  @ApiResponse({ status: 400, description: '잘못된 요청' })
+  @ApiResponse({ status: 409, description: '이미 가입된 사용자' })
+  signup(@Body() dto: SignupDto) {
+    return this.authService.signup(dto);
+  }
+
+  /**
+   * 로그인
+   */
   @Post('login')
   @Public()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Login user' })
+  @ApiOperation({ summary: '로그인' })
   @ApiResponse({
     status: 200,
-    description: 'Login successful',
-    type: TokensDto,
+    description: '로그인 성공',
   })
-  @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  login(@Body() loginDto: LoginDto): Promise<TokensDto> {
-    return this.authService.login(loginDto);
+  @ApiResponse({ status: 401, description: '가입되지 않은 사용자' })
+  login(@Body() dto: LoginDto) {
+    return this.authService.login(dto);
   }
 
+  /**
+   * Access Token 재발급
+   */
+  @Post('refresh')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Access Token 재발급' })
+  @ApiResponse({
+    status: 200,
+    description: '토큰 재발급 성공',
+  })
+  @ApiResponse({ status: 401, description: '유효하지 않은 리프레시 토큰' })
+  refresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refresh(dto.refreshToken);
+  }
+
+  /**
+   * 로그아웃
+   */
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Logout user' })
-  @ApiResponse({ status: 200, description: 'Logout successful' })
-  async logout(
-    @CurrentUser('id') userId: string,
-  ): Promise<{ message: string }> {
-    await this.authService.logout(userId);
-    return { message: 'Logout successful' };
-  }
-
-  @Post('refresh')
-  @UseGuards(JwtRefreshGuard)
-  @HttpCode(HttpStatus.OK)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Refresh access token' })
+  @ApiOperation({ summary: '로그아웃' })
   @ApiResponse({
     status: 200,
-    description: 'Token refreshed successfully',
-    type: TokensDto,
+    description: '로그아웃 성공',
   })
-  @ApiResponse({ status: 401, description: 'Invalid refresh token' })
-  refreshTokens(
-    @CurrentUser('id') userId: string,
-    @CurrentUser('refreshToken') refreshToken: string,
-  ): Promise<TokensDto> {
-    return this.authService.refreshTokens(userId, refreshToken);
+  @ApiResponse({ status: 401, description: '인증 실패' })
+  logout(
+    @CurrentUser('sub') memberId: bigint,
+    @Body() dto: LogoutDto,
+  ) {
+    return this.authService.logout(memberId, dto.refreshToken);
   }
 }

@@ -5,19 +5,21 @@ import { PrismaService } from '../prisma/prisma.service';
 export class MembersService {
   constructor(private prismaService: PrismaService) {}
 
-  async findById(id: string) {
+  async findById(memberId: bigint) {
     const member = await this.prismaService.member.findUnique({
-      where: { id },
+      where: { member_id: memberId },
       select: {
-        id: true,
+        member_id: true,
         email: true,
         name: true,
-        nickname: true,
-        phone: true,
-        birthDate: true,
+        phone_number: true,
+        birth_date: true,
         gender: true,
-        profileImage: true,
-        createdAt: true,
+        height: true,
+        weight: true,
+        bmi: true,
+        profile_url: true,
+        created_at: true,
       },
     });
 
@@ -28,7 +30,7 @@ export class MembersService {
     return member;
   }
 
-  async getProfile(userId: string) {
-    return this.findById(userId);
+  async getProfile(memberId: bigint) {
+    return this.findById(memberId);
   }
 }

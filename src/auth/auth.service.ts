@@ -1,130 +1,465 @@
 import {
   Injectable,
+  BadRequestException,
   UnauthorizedException,
   ConflictException,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcrypt';
+import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
-import { LoginDto, RegisterDto, TokensDto } from './dto';
+import { PhoneVerificationService } from './phone-verification.service';
+import { SmsService } from '../sms/sms.service';
+import {
+  SendCodeDto,
+  VerifyCodeDto,
+  SignupDto,
+  LoginDto,
+} from './dto';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private prismaService: PrismaService,
-    private jwtService: JwtService,
-    private configService: ConfigService,
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+    private readonly phoneVerificationService: PhoneVerificationService,
+    private readonly smsService: SmsService,
   ) {}
 
-  async register(registerDto: RegisterDto): Promise<TokensDto> {
-    const existingMember = await this.prismaService.member.findUnique({
-      where: { email: registerDto.email },
-    });
+  /**
+   * 휴대폰 인증번호 발송
+   */
+  async sendVerificationCode(dto: SendCodeDto) {
+    const { phoneNumber } = dto;
 
-    if (existingMember) {
-      throw new ConflictException('Email already exists');
+    // 전화번호 유효성 검증
+    if (!this.phoneVerificationService.validatePhoneNumber(phoneNumber)) {
+      throw new BadRequestException({
+        isSuccess: false,
+        code: 'AUTH201',
+        message: '유효하지 않은 전화번호 형식입니다.',
+      });
     }
 
-    const hashedPassword = await bcrypt.hash(registerDto.password, 10);
+    // 1분 제한 체크
+    const canSend =
+      await this.phoneVerificationService.checkRateLimit(phoneNumber);
+    if (!canSend) {
+      throw new BadRequestException({
+        isSuccess: false,
+        code: 'AUTH202',
+        message: '1분 후에 다시 시도해주세요.',
+      });
+    }
 
-    const member = await this.prismaService.member.create({
+    // 일일 발송 한도 체크
+    const withinDailyLimit =
+      await this.phoneVerificationService.checkDailyLimit(phoneNumber);
+    if (!withinDailyLimit) {
+      throw new BadRequestException({
+        isSuccess: false,
+        code: 'AUTH203',
+        message: '일일 인증번호 발송 한도를 초과했습니다.',
+      });
+    }
+
+    // 인증번호 생성
+    const code = this.phoneVerificationService.generateCode();
+
+    // SMS 발송
+    const smsSent = await this.smsService.sendVerificationCode(phoneNumber, code);
+    if (!smsSent) {
+      throw new BadRequestException({
+        isSuccess: false,
+        code: 'AUTH204',
+        message: '인증번호 발송에 실패했습니다. 잠시 후 다시 시도해주세요.',
+      });
+    }
+
+    // Redis에 저장
+    await this.phoneVerificationService.saveVerificationCode(phoneNumber, code);
+
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5분 후
+
+    return {
+      isSuccess: true,
+      code: '200',
+      message: '인증번호가 발송되었습니다.',
       data: {
-        email: registerDto.email,
-        password: hashedPassword,
-        name: registerDto.name,
+        expiresAt: expiresAt.toISOString(),
+        remainingAttempts: 5,
+      },
+    };
+  }
+
+  /**
+   * 휴대폰 인증번호 확인
+   */
+  async verifyCode(dto: VerifyCodeDto) {
+    const { phoneNumber, code } = dto;
+
+    // Redis에서 인증 정보 조회
+    const verificationData =
+      await this.phoneVerificationService.getVerificationCode(phoneNumber);
+
+    if (!verificationData) {
+      throw new BadRequestException({
+        isSuccess: false,
+        code: 'AUTH208',
+        message: '인증번호 발송 내역이 없습니다.',
+      });
+    }
+
+    // 시도 횟수 체크 (5회 제한)
+    if (verificationData.attempts >= 5) {
+      await this.phoneVerificationService.deleteVerificationCode(phoneNumber);
+      throw new BadRequestException({
+        isSuccess: false,
+        code: 'AUTH207',
+        message: '인증 시도 횟수를 초과했습니다. 새로운 인증번호를 요청해주세요.',
+      });
+    }
+
+    // 인증번호 불일치
+    if (verificationData.code !== code) {
+      const attempts =
+        await this.phoneVerificationService.incrementAttempts(phoneNumber);
+      throw new BadRequestException({
+        isSuccess: false,
+        code: 'AUTH205',
+        message: '인증번호가 일치하지 않습니다.',
+        data: {
+          remainingAttempts: 5 - attempts,
+        },
+      });
+    }
+
+    // 인증 성공 - Verification Token 생성
+    const verificationToken =
+      this.phoneVerificationService.generateVerificationToken(phoneNumber);
+
+    // 인증번호 삭제
+    await this.phoneVerificationService.deleteVerificationCode(phoneNumber);
+
+    return {
+      isSuccess: true,
+      code: '200',
+      message: '인증되었습니다.',
+      data: {
+        verificationToken,
+        phoneNumber,
+      },
+    };
+  }
+
+  /**
+   * 회원가입
+   */
+  async signup(dto: SignupDto) {
+    const {
+      provider,
+      providerUserId,
+      phoneNumber,
+      verificationToken,
+      email,
+      name,
+      gender,
+      birthDate,
+      height,
+      weight,
+      profileUrl,
+    } = dto;
+
+    // Verification Token 검증
+    const isValidToken = this.phoneVerificationService.verifyToken(
+      phoneNumber,
+      verificationToken,
+    );
+
+    if (!isValidToken) {
+      throw new BadRequestException({
+        isSuccess: false,
+        code: 'AUTH210',
+        message: '인증 토큰이 만료되었습니다. 휴대폰 인증을 다시 진행해주세요.',
+      });
+    }
+
+    // 이미 가입된 사용자 확인 (provider + providerUserId)
+    const existingUser = await this.prisma.social_auth.findFirst({
+      where: {
+        provider,
+        provider_user_id: providerUserId,
+        deleted_yn: 'N',
+      },
+      include: {
+        member: true,
       },
     });
 
-    const tokens = await this.generateTokens(member.id, member.email);
-    await this.updateRefreshToken(member.id, tokens.refreshToken);
-
-    return tokens;
-  }
-
-  async login(loginDto: LoginDto): Promise<TokensDto> {
-    const member = await this.prismaService.member.findUnique({
-      where: { email: loginDto.email },
-    });
-
-    if (!member || !member.password) {
-      throw new UnauthorizedException('Invalid credentials');
+    if (existingUser) {
+      throw new ConflictException({
+        isSuccess: false,
+        code: 'AUTH101',
+        message: '이미 가입된 사용자입니다.',
+      });
     }
 
-    const isPasswordValid = await bcrypt.compare(
-      loginDto.password,
-      member.password,
+    // 이미 가입된 전화번호 확인
+    const existingPhone = await this.prisma.member.findFirst({
+      where: {
+        phone_number: phoneNumber,
+        deleted_yn: 'N',
+      },
+    });
+
+    if (existingPhone) {
+      throw new ConflictException({
+        isSuccess: false,
+        code: 'AUTH212',
+        message: '이미 가입된 전화번호입니다.',
+      });
+    }
+
+    // BMI 계산
+    const heightInMeters = height / 100;
+    const bmi = weight / (heightInMeters * heightInMeters);
+
+    // 회원 생성
+    const member = await this.prisma.member.create({
+      data: {
+        email,
+        name,
+        gender,
+        birth_date: new Date(birthDate),
+        height,
+        weight,
+        bmi: parseFloat(bmi.toFixed(2)),
+        profile_url: profileUrl,
+        phone_number: phoneNumber,
+        social_auth: {
+          create: {
+            provider,
+            provider_user_id: providerUserId,
+          },
+        },
+      },
+    });
+
+    // 토큰 생성
+    const tokens = await this.generateTokens(member.member_id);
+
+    // Refresh Token 저장
+    await this.saveRefreshToken(member.member_id, tokens.refreshToken);
+
+    return {
+      isSuccess: true,
+      code: '200',
+      data: {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        name: member.name,
+        profileUrl: member.profile_url,
+      },
+    };
+  }
+
+  /**
+   * 로그인
+   */
+  async login(dto: LoginDto) {
+    const { provider, providerUserId } = dto;
+
+    // 소셜 인증 정보로 사용자 조회
+    const socialAuth = await this.prisma.social_auth.findFirst({
+      where: {
+        provider,
+        provider_user_id: providerUserId,
+        deleted_yn: 'N',
+      },
+      include: {
+        member: true,
+      },
+    });
+
+    if (!socialAuth || socialAuth.member.deleted_yn === 'Y') {
+      throw new UnauthorizedException({
+        isSuccess: false,
+        code: 'AUTH102',
+        message: '가입되지 않은 사용자입니다.',
+      });
+    }
+
+    const member = socialAuth.member;
+
+    // 토큰 생성
+    const tokens = await this.generateTokens(member.member_id);
+
+    // Refresh Token 저장 (기존 것 덮어쓰기)
+    await this.saveRefreshToken(member.member_id, tokens.refreshToken);
+
+    return {
+      isSuccess: true,
+      code: '200',
+      data: {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        name: member.name,
+        profileUrl: member.profile_url,
+      },
+    };
+  }
+
+  /**
+   * 토큰 재발급
+   */
+  async refresh(refreshToken: string) {
+    // Bearer 제거
+    const token = refreshToken.replace('Bearer ', '');
+
+    // 토큰 검증
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(token, {
+        secret: this.configService.get('JWT_REFRESH_SECRET'),
+      });
+    } catch {
+      throw new UnauthorizedException({
+        isSuccess: false,
+        code: 'AUTH105',
+        message: '리프레시 토큰이 만료되었습니다.',
+      });
+    }
+
+    // DB에서 Refresh Token 조회
+    const storedToken = await this.prisma.refresh_token.findFirst({
+      where: {
+        member_id: payload.sub,
+      },
+      orderBy: {
+        created_at: 'desc',
+      },
+    });
+
+    if (!storedToken) {
+      throw new UnauthorizedException({
+        isSuccess: false,
+        code: 'AUTH103',
+        message: '리프레시 토큰이 존재하지 않습니다.',
+      });
+    }
+
+    if (storedToken.token !== token) {
+      throw new UnauthorizedException({
+        isSuccess: false,
+        code: 'AUTH104',
+        message: '리프레시 토큰이 일치하지 않습니다.',
+      });
+    }
+
+    // 새 Access Token 생성
+    const accessToken = this.jwtService.sign(
+      { sub: payload.sub },
+      {
+        secret: this.configService.get('JWT_ACCESS_SECRET'),
+        expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION'),
+      },
     );
 
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
+    return {
+      isSuccess: true,
+      code: '200',
+      data: {
+        accessToken: `Bearer ${accessToken}`,
+      },
+    };
+  }
+
+  /**
+   * 로그아웃
+   */
+  async logout(memberId: bigint, refreshToken: string) {
+    const token = refreshToken.replace('Bearer ', '');
+
+    // DB에서 Refresh Token 조회
+    const storedToken = await this.prisma.refresh_token.findFirst({
+      where: {
+        member_id: memberId,
+      },
+      orderBy: {
+        created_at: 'desc',
+      },
+    });
+
+    if (!storedToken) {
+      throw new UnauthorizedException({
+        isSuccess: false,
+        code: 'AUTH103',
+        message: '리프레시 토큰이 존재하지 않습니다.',
+      });
     }
 
-    const tokens = await this.generateTokens(member.id, member.email);
-    await this.updateRefreshToken(member.id, tokens.refreshToken);
-
-    return tokens;
-  }
-
-  async logout(userId: string): Promise<void> {
-    await this.prismaService.member.update({
-      where: { id: userId },
-      data: { refreshToken: null },
-    });
-  }
-
-  async refreshTokens(
-    userId: string,
-    refreshToken: string,
-  ): Promise<TokensDto> {
-    const member = await this.prismaService.member.findUnique({
-      where: { id: userId },
-    });
-
-    if (!member || member.refreshToken !== refreshToken) {
-      throw new UnauthorizedException('Invalid refresh token');
+    if (storedToken.token !== token) {
+      throw new UnauthorizedException({
+        isSuccess: false,
+        code: 'AUTH104',
+        message: '리프레시 토큰이 일치하지 않습니다.',
+      });
     }
 
-    const tokens = await this.generateTokens(member.id, member.email);
-    await this.updateRefreshToken(member.id, tokens.refreshToken);
+    // Refresh Token 삭제
+    await this.prisma.refresh_token.delete({
+      where: {
+        refresh_token_id: storedToken.refresh_token_id,
+      },
+    });
 
-    return tokens;
+    return {
+      isSuccess: true,
+      code: '200',
+    };
   }
 
-  private async generateTokens(
-    userId: string,
-    email: string,
-  ): Promise<TokensDto> {
-    const payload = { sub: userId, email };
+  /**
+   * 토큰 생성 (Access + Refresh)
+   */
+  private async generateTokens(memberId: bigint) {
+    const payload = { sub: memberId };
 
-    const accessExpiration =
-      this.configService.get<string>('jwt.accessExpiration') || '15m';
-    const refreshExpiration =
-      this.configService.get<string>('jwt.refreshExpiration') || '7d';
+    const accessToken = this.jwtService.sign(payload, {
+      secret: this.configService.get('JWT_ACCESS_SECRET'),
+      expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION'),
+    });
 
-    const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(payload, {
-        secret: this.configService.get<string>('jwt.secret'),
+    const refreshToken = this.jwtService.sign(payload, {
+      secret: this.configService.get('JWT_REFRESH_SECRET'),
+      expiresIn: this.configService.get('JWT_REFRESH_EXPIRATION'),
+    });
 
-        expiresIn: accessExpiration as any,
-      }),
-      this.jwtService.signAsync(payload, {
-        secret: this.configService.get<string>('jwt.refreshSecret'),
-
-        expiresIn: refreshExpiration as any,
-      }),
-    ]);
-
-    return { accessToken, refreshToken };
+    return {
+      accessToken: `Bearer ${accessToken}`,
+      refreshToken: `Bearer ${refreshToken}`,
+    };
   }
 
-  private async updateRefreshToken(
-    userId: string,
-    refreshToken: string,
-  ): Promise<void> {
-    await this.prismaService.member.update({
-      where: { id: userId },
-      data: { refreshToken },
+  /**
+   * Refresh Token 저장
+   */
+  private async saveRefreshToken(memberId: bigint, refreshToken: string) {
+    const token = refreshToken.replace('Bearer ', '');
+
+    // 기존 토큰 삭제
+    await this.prisma.refresh_token.deleteMany({
+      where: { member_id: memberId },
+    });
+
+    // 새 토큰 저장
+    await this.prisma.refresh_token.create({
+      data: {
+        member_id: memberId,
+        token,
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
     });
   }
 }

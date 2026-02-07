@@ -1,4 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { Redis } from '@upstash/redis';
 import { REDIS_CLIENT } from '../redis';
 
@@ -6,9 +8,32 @@ import { REDIS_CLIENT } from '../redis';
 export class PhoneVerificationService {
   constructor(
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly configService: ConfigService,
+    private readonly jwtService: JwtService,
   ) {}
 
-  // 인증번호 저장 (5분 TTL)
+  /**
+   * 인증번호 생성 (6자리 숫자)
+   */
+  generateCode(): string {
+    // 개발 환경에서는 고정값 사용
+    if (this.configService.get('NODE_ENV') === 'development') {
+      return '123456';
+    }
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  /**
+   * 전화번호 유효성 검증
+   */
+  validatePhoneNumber(phoneNumber: string): boolean {
+    const phoneRegex = /^01[0-9]{8,9}$/;
+    return phoneRegex.test(phoneNumber.replace(/-/g, ''));
+  }
+
+  /**
+   * 인증번호 저장 (5분 TTL)
+   */
   async saveVerificationCode(phoneNumber: string, code: string): Promise<void> {
     const key = `phone_verify:${phoneNumber}`;
     const data = {
@@ -21,7 +46,9 @@ export class PhoneVerificationService {
     await this.redis.setex(key, 300, JSON.stringify(data));
   }
 
-  // 인증번호 조회
+  /**
+   * 인증번호 조회
+   */
   async getVerificationCode(phoneNumber: string): Promise<any> {
     const key = `phone_verify:${phoneNumber}`;
     const data = await this.redis.get(key);
@@ -31,7 +58,9 @@ export class PhoneVerificationService {
     return typeof data === 'string' ? JSON.parse(data) : data;
   }
 
-  // 시도 횟수 증가
+  /**
+   * 시도 횟수 증가
+   */
   async incrementAttempts(phoneNumber: string): Promise<number> {
     const key = `phone_verify:${phoneNumber}`;
     const data = await this.getVerificationCode(phoneNumber);
@@ -47,13 +76,17 @@ export class PhoneVerificationService {
     return data.attempts;
   }
 
-  // 인증 완료 후 삭제
+  /**
+   * 인증 완료 후 삭제
+   */
   async deleteVerificationCode(phoneNumber: string): Promise<void> {
     const key = `phone_verify:${phoneNumber}`;
     await this.redis.del(key);
   }
 
-  // 발송 제한 체크 (1분에 1회)
+  /**
+   * 발송 제한 체크 (1분에 1회)
+   */
   async checkRateLimit(phoneNumber: string): Promise<boolean> {
     const key = `phone_ratelimit:${phoneNumber}`;
     const exists = await this.redis.exists(key);
@@ -65,7 +98,9 @@ export class PhoneVerificationService {
     return true; // 발송 가능
   }
 
-  // 일일 발송 제한 체크 (하루 5회)
+  /**
+   * 일일 발송 제한 체크 (하루 5회)
+   */
   async checkDailyLimit(phoneNumber: string): Promise<boolean> {
     const key = `phone_daily:${phoneNumber}`;
     const count = await this.redis.get(key);
@@ -84,28 +119,36 @@ export class PhoneVerificationService {
     return true; // 발송 가능
   }
 
-  // Verification Token 저장 (10분 TTL)
-  async saveVerificationToken(
-    phoneNumber: string,
-    token: string
-  ): Promise<void> {
-    const key = `phone_token:${phoneNumber}`;
-    await this.redis.setex(key, 600, token); // 10분
+  /**
+   * Verification Token 생성 (10분 유효)
+   */
+  generateVerificationToken(phoneNumber: string): string {
+    const payload = {
+      phoneNumber,
+      purpose: 'phone_verification',
+    };
+
+    return this.jwtService.sign(payload, {
+      secret: this.configService.get('JWT_ACCESS_SECRET'),
+      expiresIn: '10m',
+    });
   }
 
-  // Verification Token 검증
-  async verifyToken(phoneNumber: string, token: string): Promise<boolean> {
-    const key = `phone_token:${phoneNumber}`;
-    const storedToken = await this.redis.get(key);
+  /**
+   * Verification Token 검증
+   */
+  verifyToken(phoneNumber: string, token: string): boolean {
+    try {
+      const payload = this.jwtService.verify(token, {
+        secret: this.configService.get('JWT_ACCESS_SECRET'),
+      });
 
-    if (!storedToken) return false;
-
-    return storedToken === token;
-  }
-
-  // Token 사용 후 삭제
-  async deleteVerificationToken(phoneNumber: string): Promise<void> {
-    const key = `phone_token:${phoneNumber}`;
-    await this.redis.del(key);
+      return (
+        payload.phoneNumber === phoneNumber &&
+        payload.purpose === 'phone_verification'
+      );
+    } catch {
+      return false;
+    }
   }
 }

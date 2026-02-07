@@ -6,12 +6,14 @@ import { AuthController } from './auth.controller';
 import { PhoneVerificationService } from './phone-verification.service';
 import { JwtStrategy, JwtRefreshStrategy } from './strategies';
 import { RedisModule } from '../redis';
+import { SmsModule } from '../sms';
 
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({}),
     RedisModule,
+    SmsModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, PhoneVerificationService, JwtStrategy, JwtRefreshStrategy],

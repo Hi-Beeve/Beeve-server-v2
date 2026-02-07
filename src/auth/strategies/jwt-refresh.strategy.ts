@@ -18,26 +18,28 @@ export class JwtRefreshStrategy extends PassportStrategy(
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey:
-        configService.get<string>('jwt.refreshSecret') ||
+        configService.get<string>('JWT_REFRESH_SECRET') ||
         'default-refresh-secret',
       passReqToCallback: true,
     };
     super(options);
   }
 
-  async validate(req: Request, payload: { sub: string; email: string }) {
+  async validate(req: Request, payload: { sub: bigint }) {
     const refreshToken = req.get('Authorization')?.replace('Bearer ', '');
 
     const member = await this.prismaService.member.findUnique({
-      where: { id: payload.sub },
+      where: { member_id: payload.sub },
     });
 
-    if (!member || !member.isActive || member.refreshToken !== refreshToken) {
-      throw new UnauthorizedException('Invalid refresh token');
+    if (!member || member.deleted_yn === 'Y') {
+      throw new UnauthorizedException('유효하지 않은 사용자입니다.');
     }
 
+    // Refresh Token 검증은 AuthService에서 처리
+
     return {
-      id: member.id,
+      sub: member.member_id,
       email: member.email,
       refreshToken,
     };
