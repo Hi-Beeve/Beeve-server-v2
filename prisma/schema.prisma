@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,127 +7,162 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Member 모델
-model Member {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  password      String?
-  name          String?
-  nickname      String?
-  phone         String?
-  birthDate     DateTime?
-  gender        Gender?
-  profileImage  String?
-  provider      AuthProvider @default(LOCAL)
-  providerId    String?
-  refreshToken  String?
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model daily_recommendation {
+  recommendation_id             BigInt                          @id @default(autoincrement())
+  member_id                     BigInt
+  total_duration                Int?                            @db.SmallInt
+  rpe                           String?                         @db.VarChar
+  recommendation_date           DateTime                        @default(now()) @db.Timestamptz(6)
+  target_fitness_type           String?                         @db.VarChar
+  ai_prompt                     String?
+  ai_response                   String?
+  status                        String?                         @db.VarChar
+  deleted_yn                    String?                         @db.VarChar
+  member                        member                          @relation(fields: [member_id], references: [member_id], onDelete: NoAction, onUpdate: NoAction, map: "recommend_schedule_member_id_fkey")
+  daily_recommendation_exercise daily_recommendation_exercise[]
+  recommendation_feedback       recommendation_feedback[]
 
-  fitnessRecords FitnessRecord[]
-  exercisePlans  ExercisePlan[]
-
-  @@map("members")
+  @@unique([member_id, recommendation_date], map: "uq_member_recommendation_date")
 }
 
-// 체력측정 기록
-model FitnessRecord {
-  id            String   @id @default(uuid())
-  memberId      String
-  member        Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
-
-  // 신체 정보
-  height        Float?   // cm
-  weight        Float?   // kg
-  bmi           Float?
-
-  // 체력 측정 데이터
-  cardioEndurance   Float?  // 심폐지구력
-  muscleStrength    Float?  // 근력
-  muscleEndurance   Float?  // 근지구력
-  flexibility       Float?  // 유연성
-  balance           Float?  // 균형감각
-  agility           Float?  // 민첩성
-
-  measuredAt    DateTime @default(now())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@map("fitness_records")
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model daily_recommendation_exercise {
+  recommendation_exercise_id BigInt               @id @default(autoincrement())
+  recommendation_id          BigInt
+  exercise_name              String               @db.VarChar
+  reps                       Int?                 @db.SmallInt
+  sets                       Int?                 @db.SmallInt
+  rest_seconds               Int?                 @db.SmallInt
+  created_at                 DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at                 DateTime?            @default(now()) @db.Timestamptz(6)
+  exercise_id                BigInt
+  duration                   Int?                 @db.SmallInt
+  daily_recommendation       daily_recommendation @relation(fields: [recommendation_id], references: [recommendation_id], onDelete: NoAction, onUpdate: NoAction)
+  exercise_program           exercise_program     @relation(fields: [exercise_id], references: [exercise_id], onDelete: NoAction, onUpdate: NoAction, map: "recommend_schedule_detail_exercise_id_fkey")
 }
 
-// 운동 계획
-model ExercisePlan {
-  id            String   @id @default(uuid())
-  memberId      String
-  member        Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
-
-  title         String
-  description   String?
-  difficulty    Difficulty @default(BEGINNER)
-  duration      Int      // 분 단위
-  calories      Int?     // 예상 소모 칼로리
-
-  exercises     Exercise[]
-
-  isActive      Boolean  @default(true)
-  startDate     DateTime?
-  endDate       DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@map("exercise_plans")
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model exercise_program {
+  exercise_id                   BigInt                          @id @default(autoincrement())
+  exercise_name                 String?                         @db.VarChar
+  exercise_step                 String?                         @db.VarChar
+  equipment                     String?                         @db.VarChar
+  caution                       String?                         @db.VarChar
+  fitness_type                  String?                         @db.VarChar
+  purpose                       String?                         @db.VarChar
+  daily_recommendation_exercise daily_recommendation_exercise[]
 }
 
-// 개별 운동
-model Exercise {
-  id            String   @id @default(uuid())
-  planId        String
-  plan          ExercisePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-
-  name          String
-  description   String?
-  category      ExerciseCategory
-  sets          Int?
-  reps          Int?
-  duration      Int?     // 초 단위
-  restTime      Int?     // 초 단위
-  orderIndex    Int      @default(0)
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@map("exercises")
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model fitness_measure {
+  measure_id     BigInt    @id @default(autoincrement())
+  member_id      BigInt?
+  age            Int       @db.SmallInt
+  age_range      Json
+  measure_day    DateTime  @db.Date
+  gender         String    @db.VarChar
+  height         Decimal?  @db.Decimal
+  weight         Decimal?  @db.Decimal
+  bmi            Decimal?  @db.Decimal
+  fitness_result Json?
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
+  member         member?   @relation(fields: [member_id], references: [member_id], onDelete: NoAction, onUpdate: NoAction)
 }
 
-// Enums
-enum Gender {
-  MALE
-  FEMALE
-  OTHER
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model member {
+  member_id                 BigInt                      @id @default(autoincrement())
+  email                     String                      @db.VarChar
+  name                      String?                     @db.VarChar
+  birth_date                DateTime?                   @db.Date
+  gender                    String                      @db.VarChar
+  height                    Decimal?                    @db.Decimal
+  weight                    Decimal?                    @db.Decimal
+  bmi                       Decimal?                    @db.Decimal
+  profile_url               String?
+  phone_number              String?                     @unique @db.VarChar(20)
+  withdraw_reason           String?                     @db.VarChar
+  created_at                DateTime                    @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime                    @default(now()) @db.Timestamptz(6)
+  deleted_yn                String                      @default("N") @db.VarChar
+  daily_recommendation      daily_recommendation[]
+  fitness_measure           fitness_measure[]
+  recommendation_feedback   recommendation_feedback[]
+  refresh_token             refresh_token[]
+  social_auth               social_auth[]
+  user_exercise_information user_exercise_information[]
 }
 
-enum AuthProvider {
-  LOCAL
-  GOOGLE
-  KAKAO
-  APPLE
+model rank_standard {
+  rank_standard_id  BigInt   @id @default(autoincrement())
+  gender            String   @db.VarChar
+  age_min           Int      @db.SmallInt
+  age_max           Int      @db.SmallInt
+  grade             Int      @db.SmallInt
+  push_up_reps      Int      @db.SmallInt
+  step_test_vo2max  Decimal  @db.Decimal
+  cross_crunch_reps Int      @db.SmallInt
+  sit_and_reach     Decimal  @db.Decimal
+  reaction_time     Decimal? @db.Decimal
+  flight_time       Decimal? @db.Decimal
 }
 
-enum Difficulty {
-  BEGINNER
-  INTERMEDIATE
-  ADVANCED
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model recommendation_feedback {
+  feedback_id          BigInt               @id @default(autoincrement())
+  recommendation_id    BigInt
+  member_id            BigInt?
+  completed_at         DateTime?            @default(now()) @db.Timestamptz(6)
+  difficulty_rating    Int?                 @db.SmallInt
+  satisfaction_rating  Int?                 @db.SmallInt
+  actual_duration      Int?                 @db.SmallInt
+  member               member?              @relation(fields: [member_id], references: [member_id], onDelete: NoAction, onUpdate: NoAction)
+  daily_recommendation daily_recommendation @relation(fields: [recommendation_id], references: [recommendation_id], onDelete: NoAction, onUpdate: NoAction)
 }
 
-enum ExerciseCategory {
-  CARDIO
-  STRENGTH
-  FLEXIBILITY
-  BALANCE
-  HIIT
-  YOGA
-  PILATES
-  OTHER
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model refresh_token {
+  refresh_token_id BigInt   @id @default(autoincrement())
+  member_id        BigInt
+  token            String
+  created_at       DateTime @db.Timestamptz(6)
+  updated_at       DateTime @db.Timestamptz(6)
+  member           member   @relation(fields: [member_id], references: [member_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model social_auth {
+  social_auth_id   BigInt    @id @default(autoincrement())
+  member_id        BigInt
+  provider         String    @db.VarChar
+  provider_user_id String    @db.VarChar
+  consent_scope    String?   @db.VarChar
+  created_at       DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime? @default(now()) @db.Timestamptz(6)
+  deleted_yn       String?   @default("N") @db.VarChar
+  member           member    @relation(fields: [member_id], references: [member_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model user_exercise_information {
+  exercise_info_id BigInt    @id(map: "exercise_information_pkey") @default(autoincrement())
+  member_id        BigInt
+  goal             String    @db.VarChar
+  place            String    @db.VarChar
+  disease          String?   @db.VarChar
+  injury           String?   @db.VarChar
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime? @default(now()) @db.Timestamptz(6)
+  deleted_yn       String?   @default("N") @db.VarChar
+  member           member    @relation(fields: [member_id], references: [member_id], onDelete: NoAction, onUpdate: NoAction, map: "exercise_information_member_id_fkey")
 }
