@@ -660,24 +660,6 @@ Authorization: Bearer {accessToken}
           }
         ]
       },
-      {
-        "date": "2025-02-10",
-        "focus": "유연성 및 회복",
-        "warm_up": "5분 가벼운 스트레칭",
-        "cool_down": "5분 명상 및 호흡",
-        "exercises": [
-          {
-            "exerciseId": 120,
-            "name": "요가 루틴",
-            "sets": 1,
-            "reps": 1,
-            "duration": 30,
-            "rest_seconds": 0,
-            "rpe": 4,
-            "description": "전신 유연성 향상"
-          }
-        ]
-      }
     ],
     "notes": "심폐지구력이 가장 부족하니 유산소 운동을 집중적으로 진행하세요. 유연성도 함께 개선하면 부상 예방에 도움이 됩니다.",
     "createdAt": "2025-02-07T15:30:00Z"
@@ -1390,9 +1372,3 @@ export class RankController {
 ```
 1. GET /api/fitness/recommend - AI 추천 받기
 ```
-
----
-
-## 🎉 완료!
-
-전체 API 명세가 완성되었습니다! 이제 구현만 하면 됩니다! 😊
