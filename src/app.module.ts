@@ -6,6 +6,7 @@ import { RedisModule } from './redis';
 import { AuthModule } from './auth';
 import { MembersModule } from './members';
 import { FitnessModule } from './fitness';
+import { RankModule } from './rank';
 import { ExerciseModule } from './exercise';
 import { HealthModule } from './health';
 import { JwtAuthGuard } from './common/guards';
@@ -18,6 +19,7 @@ import { JwtAuthGuard } from './common/guards';
     AuthModule,
     MembersModule,
     FitnessModule,
+    RankModule,
     ExerciseModule,
     HealthModule,
   ],
