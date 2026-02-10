@@ -70,8 +70,8 @@ export class FitnessController {
   @ApiOperation({ summary: '날짜별 6각형 차트 조회' })
   @ApiQuery({
     name: 'measureDay',
-    required: true,
-    description: '조회할 날짜 (YYYY-MM-DD)',
+    required: false,
+    description: '조회할 날짜 (YYYY-MM-DD). 미입력 시 가장 최근 측정 데이터 반환',
   })
   @ApiResponse({ status: 200, description: '조회 성공' })
   @ApiResponse({ status: 400, description: '잘못된 날짜 형식' })
@@ -80,7 +80,7 @@ export class FitnessController {
     @CurrentUser('sub') memberId: bigint,
     @Query() query: QueryFitnessDto,
   ) {
-    return this.fitnessService.getFitnessChart(memberId, query.measureDay!);
+    return this.fitnessService.getFitnessChart(memberId, query.measureDay);
   }
 
   /**

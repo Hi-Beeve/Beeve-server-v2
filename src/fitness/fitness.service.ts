@@ -206,57 +206,62 @@ export class FitnessService {
       },
     });
 
-    if (!measures || measures.length === 0) {
-      throw new NotFoundException({
-        isSuccess: false,
-        code: 'FITNESS302',
-        message: '체력 측정 기록이 존재하지 않습니다.',
-      });
-    }
-
-    const measureDays = measures.map(
+    const measureDates = measures.map(
       (m) => m.measure_day.toISOString().split('T')[0],
     );
 
-    return {
-      isSuccess: true,
-      code: '200',
-      data: {
-        measureDays,
-      },
-    };
+    return { measureDates };
   }
 
   /**
    * 날짜별 6각형 차트 조회
    */
-  async getFitnessChart(memberId: bigint, measureDay: string) {
-    // 1. 날짜 파싱
-    const targetDate = new Date(measureDay);
-    if (isNaN(targetDate.getTime())) {
-      throw new BadRequestException({
-        isSuccess: false,
-        code: 'FITNESS306',
-        message:
-          '날짜 형식이 올바르지 않습니다. YYYY-MM-DD 형식으로 입력해주세요.',
-      });
-    }
+  async getFitnessChart(memberId: bigint, measureDay?: string) {
+    let measure;
 
-    // 2. 측정 기록 조회
-    const measure = await this.prisma.fitness_measure.findFirst({
-      where: {
-        member_id: memberId,
-        measure_day: targetDate,
-        deleted_yn: 'N',
-      },
-    });
+    if (measureDay) {
+      // 날짜가 제공된 경우 해당 날짜의 기록 조회
+      const targetDate = new Date(measureDay);
+      if (isNaN(targetDate.getTime())) {
+        throw new BadRequestException({
+          isSuccess: false,
+          code: 'FITNESS306',
+          message:
+            '날짜 형식이 올바르지 않습니다. YYYY-MM-DD 형식으로 입력해주세요.',
+        });
+      }
 
-    if (!measure) {
-      throw new NotFoundException({
-        isSuccess: false,
-        code: 'FITNESS302',
-        message: '해당 날짜의 체력 측정 기록이 존재하지 않습니다.',
+      measure = await this.prisma.fitness_measure.findFirst({
+        where: {
+          member_id: memberId,
+          measure_day: targetDate,
+          deleted_yn: 'N',
+        },
       });
+
+      if (!measure) {
+        throw new NotFoundException({
+          isSuccess: false,
+          code: 'FITNESS302',
+          message: '해당 날짜의 체력 측정 기록이 존재하지 않습니다.',
+        });
+      }
+    } else {
+      // 날짜가 없는 경우 가장 최근 기록 조회
+      measure = await this.prisma.fitness_measure.findFirst({
+        where: {
+          member_id: memberId,
+          deleted_yn: 'N',
+        },
+        orderBy: {
+          measure_day: 'desc',
+        },
+      });
+
+      if (!measure) {
+        // 측정 기록이 전혀 없는 경우 빈 응답
+        return { data: null };
+      }
     }
 
     // 3. fitness_result JSON 파싱
@@ -283,13 +288,16 @@ export class FitnessService {
     // 5. 순위 계산
     const totalRank = await this.calculateRank(memberId, measure);
 
+    // 실제 측정일 (파라미터로 받은 값이 아닌 DB 값 사용)
+    const actualMeasureDay = measure.measure_day.toISOString().split('T')[0];
+
     return {
       isSuccess: true,
       code: '200',
       data: {
         totalGrade,
         totalRank,
-        measureDay,
+        measureDay: actualMeasureDay,
         measurePlace: measure.measure_place,
         rpe: measure.rpe,
         height: Number(measure.height),

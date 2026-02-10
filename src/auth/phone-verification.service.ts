@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, Optional, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Redis } from '@upstash/redis';
@@ -6,11 +6,68 @@ import { REDIS_CLIENT } from '../redis';
 
 @Injectable()
 export class PhoneVerificationService {
+  private readonly logger = new Logger(PhoneVerificationService.name);
+  private readonly isDevelopment: boolean;
+  // 개발 환경용 메모리 저장소
+  private readonly memoryStore = new Map<string, { data: string; expiresAt: number }>();
+
   constructor(
-    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    @Optional() @Inject(REDIS_CLIENT) private readonly redis: Redis | null,
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
-  ) {}
+  ) {
+    this.isDevelopment = this.configService.get('NODE_ENV') === 'development';
+    if (this.isDevelopment && !this.redis) {
+      this.logger.warn('Redis not configured. Using in-memory store for development.');
+    }
+  }
+
+  /**
+   * 개발 환경용 메모리 저장
+   */
+  private memorySet(key: string, value: string, ttlSeconds: number): void {
+    this.memoryStore.set(key, {
+      data: value,
+      expiresAt: Date.now() + ttlSeconds * 1000,
+    });
+  }
+
+  /**
+   * 개발 환경용 메모리 조회
+   */
+  private memoryGet(key: string): string | null {
+    const item = this.memoryStore.get(key);
+    if (!item) return null;
+    if (Date.now() > item.expiresAt) {
+      this.memoryStore.delete(key);
+      return null;
+    }
+    return item.data;
+  }
+
+  /**
+   * 개발 환경용 메모리 삭제
+   */
+  private memoryDel(key: string): void {
+    this.memoryStore.delete(key);
+  }
+
+  /**
+   * 개발 환경용 TTL 조회
+   */
+  private memoryTtl(key: string): number {
+    const item = this.memoryStore.get(key);
+    if (!item) return -2;
+    const remaining = Math.floor((item.expiresAt - Date.now()) / 1000);
+    return remaining > 0 ? remaining : -2;
+  }
+
+  /**
+   * 개발 환경용 존재 여부
+   */
+  private memoryExists(key: string): boolean {
+    return this.memoryGet(key) !== null;
+  }
 
   /**
    * 인증번호 생성 (6자리 숫자)
@@ -43,7 +100,11 @@ export class PhoneVerificationService {
     };
 
     // 5분(300초) 후 자동 삭제
-    await this.redis.setex(key, 300, JSON.stringify(data));
+    if (this.redis) {
+      await this.redis.setex(key, 300, JSON.stringify(data));
+    } else {
+      this.memorySet(key, JSON.stringify(data), 300);
+    }
   }
 
   /**
@@ -51,11 +112,25 @@ export class PhoneVerificationService {
    */
   async getVerificationCode(phoneNumber: string): Promise<any> {
     const key = `phone_verify:${phoneNumber}`;
-    const data = await this.redis.get(key);
+    let data: string | null;
 
-    if (!data) return null;
+    try {
+      if (this.redis) {
+        this.logger.debug(`Redis get: ${key}`);
+        data = await this.redis.get(key);
+      } else {
+        this.logger.debug(`Memory get: ${key}`);
+        data = this.memoryGet(key);
+        this.logger.debug(`Memory result: ${data}`);
+      }
 
-    return typeof data === 'string' ? JSON.parse(data) : data;
+      if (!data) return null;
+
+      return typeof data === 'string' ? JSON.parse(data) : data;
+    } catch (error) {
+      this.logger.error(`getVerificationCode error: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
   /**
@@ -70,8 +145,13 @@ export class PhoneVerificationService {
     data.attempts += 1;
 
     // TTL 유지하면서 업데이트
-    const ttl = await this.redis.ttl(key);
-    await this.redis.setex(key, ttl, JSON.stringify(data));
+    if (this.redis) {
+      const ttl = await this.redis.ttl(key);
+      await this.redis.setex(key, ttl > 0 ? ttl : 300, JSON.stringify(data));
+    } else {
+      const ttl = this.memoryTtl(key);
+      this.memorySet(key, JSON.stringify(data), ttl > 0 ? ttl : 300);
+    }
 
     return data.attempts;
   }
@@ -81,7 +161,11 @@ export class PhoneVerificationService {
    */
   async deleteVerificationCode(phoneNumber: string): Promise<void> {
     const key = `phone_verify:${phoneNumber}`;
-    await this.redis.del(key);
+    if (this.redis) {
+      await this.redis.del(key);
+    } else {
+      this.memoryDel(key);
+    }
   }
 
   /**
@@ -89,13 +173,17 @@ export class PhoneVerificationService {
    */
   async checkRateLimit(phoneNumber: string): Promise<boolean> {
     const key = `phone_ratelimit:${phoneNumber}`;
-    const exists = await this.redis.exists(key);
 
-    if (exists) return false; // 제한 중
+    if (this.redis) {
+      const exists = await this.redis.exists(key);
+      if (exists) return false;
+      await this.redis.setex(key, 60, '1');
+    } else {
+      if (this.memoryExists(key)) return false;
+      this.memorySet(key, '1', 60);
+    }
 
-    // 1분(60초) 동안 재발송 불가
-    await this.redis.setex(key, 60, '1');
-    return true; // 발송 가능
+    return true;
   }
 
   /**
@@ -103,9 +191,15 @@ export class PhoneVerificationService {
    */
   async checkDailyLimit(phoneNumber: string): Promise<boolean> {
     const key = `phone_daily:${phoneNumber}`;
-    const count = await this.redis.get(key);
+    let count: string | null;
 
-    if (count && Number(count) >= 5) return false; // 제한 초과
+    if (this.redis) {
+      count = await this.redis.get(key);
+    } else {
+      count = this.memoryGet(key);
+    }
+
+    if (count && Number(count) >= 5) return false;
 
     const currentCount = count ? Number(count) + 1 : 1;
 
@@ -115,8 +209,13 @@ export class PhoneVerificationService {
     tomorrow.setHours(24, 0, 0, 0);
     const ttl = Math.floor((tomorrow.getTime() - now.getTime()) / 1000);
 
-    await this.redis.setex(key, ttl, String(currentCount));
-    return true; // 발송 가능
+    if (this.redis) {
+      await this.redis.setex(key, ttl, String(currentCount));
+    } else {
+      this.memorySet(key, String(currentCount), ttl);
+    }
+
+    return true;
   }
 
   /**
