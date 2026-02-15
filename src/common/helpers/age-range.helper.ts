@@ -1,13 +1,15 @@
 /**
- * 생년월일로부터 나이 계산
+ * 생년월일로부터 나이 계산 (한국 시간 기준)
  */
 export function calculateAge(birthDate: Date): number {
-  const today = new Date();
+  const now = new Date();
+  const kstOffset = 9 * 60 * 60 * 1000; // UTC+9
+  const today = new Date(now.getTime() + kstOffset);
   const birth = new Date(birthDate);
-  let age = today.getFullYear() - birth.getFullYear();
-  const monthDiff = today.getMonth() - birth.getMonth();
+  let age = today.getUTCFullYear() - birth.getFullYear();
+  const monthDiff = today.getUTCMonth() - birth.getMonth();
 
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+  if (monthDiff < 0 || (monthDiff === 0 && today.getUTCDate() < birth.getDate())) {
     age--;
   }
 

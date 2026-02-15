@@ -85,7 +85,6 @@ export class RankService {
 
     return {
       isSuccess: true,
-      code: '200',
       data: {
         currentRank: {
           rank: currentRank,
@@ -112,14 +111,6 @@ export class RankService {
       },
     });
 
-    if (!measures || measures.length === 0) {
-      throw new NotFoundException({
-        isSuccess: false,
-        code: 'FITNESS302',
-        message: '체력 측정 기록이 존재하지 않습니다.',
-      });
-    }
-
     // 각 체력 항목별로 그룹화
     const totalGradeList: { grade: number; date: string }[] = [];
     const strengthGradeList: { grade: number; date: string }[] = [];
@@ -128,6 +119,19 @@ export class RankService {
     const flexibilityGradeList: { grade: number; date: string }[] = [];
     const agilityGradeList: { grade: number; date: string }[] = [];
     const quicknessGradeList: { grade: number; date: string }[] = [];
+
+    // 데이터가 없으면 빈 배열 반환
+    if (!measures || measures.length === 0) {
+      return {
+        totalGradeList,
+        strengthGradeList,
+        cardioGradeList,
+        enduranceGradeList,
+        flexibilityGradeList,
+        agilityGradeList,
+        quicknessGradeList,
+      };
+    }
 
     for (const measure of measures) {
       const date = measure.measure_day.toISOString().split('T')[0];
@@ -165,17 +169,13 @@ export class RankService {
     }
 
     return {
-      isSuccess: true,
-      code: '200',
-      data: {
-        totalGradeList,
-        strengthGradeList,
-        cardioGradeList,
-        enduranceGradeList,
-        flexibilityGradeList,
-        agilityGradeList,
-        quicknessGradeList,
-      },
+      totalGradeList,
+      strengthGradeList,
+      cardioGradeList,
+      enduranceGradeList,
+      flexibilityGradeList,
+      agilityGradeList,
+      quicknessGradeList,
     };
   }
 

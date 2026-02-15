@@ -6,34 +6,30 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { Response } from 'express';
 
 export interface ApiResponse<T> {
-  statusCode: number;
-  message: string;
+  isSuccess: boolean;
   data: T;
-  timestamp: string;
 }
 
 @Injectable()
-export class TransformInterceptor<T> implements NestInterceptor<
-  T,
-  ApiResponse<T>
-> {
+export class TransformInterceptor<T> implements NestInterceptor<T, any> {
   intercept(
     context: ExecutionContext,
     next: CallHandler,
-  ): Observable<ApiResponse<T>> {
-    const response = context.switchToHttp().getResponse<Response>();
-    const statusCode = response.statusCode;
-
+  ): Observable<any> {
     return next.handle().pipe(
-      map((data: T) => ({
-        statusCode,
-        message: 'Success',
-        data,
-        timestamp: new Date().toISOString(),
-      })),
+      map((data: T) => {
+        // 이미 isSuccess 필드가 있으면 그대로 반환
+        if (data && typeof data === 'object' && 'isSuccess' in data) {
+          return data;
+        }
+        // 없으면 감싸서 반환
+        return {
+          isSuccess: true,
+          data,
+        };
+      }),
     );
   }
 }

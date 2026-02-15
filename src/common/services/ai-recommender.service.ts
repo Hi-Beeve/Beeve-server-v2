@@ -261,11 +261,13 @@ ${exerciseList}
   }
 
   /**
-   * 날짜 문자열 생성 (오늘 + n일)
+   * 날짜 문자열 생성 (오늘 + n일, 한국 시간 기준)
    */
   private getDateString(daysFromNow: number): string {
-    const date = new Date();
-    date.setDate(date.getDate() + daysFromNow);
-    return date.toISOString().split('T')[0];
+    const now = new Date();
+    const kstOffset = 9 * 60 * 60 * 1000; // UTC+9
+    const kstDate = new Date(now.getTime() + kstOffset);
+    kstDate.setUTCDate(kstDate.getUTCDate() + daysFromNow);
+    return kstDate.toISOString().split('T')[0];
   }
 }

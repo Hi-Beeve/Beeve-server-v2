@@ -70,8 +70,8 @@ export class FitnessController {
   @ApiOperation({ summary: '날짜별 6각형 차트 조회' })
   @ApiQuery({
     name: 'measureDay',
-    required: true,
-    description: '조회할 날짜 (YYYY-MM-DD)',
+    required: false,
+    description: '조회할 날짜 (YYYY-MM-DD). 미입력 시 가장 최근 측정 데이터 반환',
   })
   @ApiResponse({ status: 200, description: '조회 성공' })
   @ApiResponse({ status: 400, description: '잘못된 날짜 형식' })
@@ -80,7 +80,7 @@ export class FitnessController {
     @CurrentUser('sub') memberId: bigint,
     @Query() query: QueryFitnessDto,
   ) {
-    return this.fitnessService.getFitnessChart(memberId, query.measureDay!);
+    return this.fitnessService.getFitnessChart(memberId, query.measureDay);
   }
 
   /**
@@ -123,7 +123,6 @@ export class FitnessController {
       if (!member || !member.birth_date) {
         return {
           isSuccess: false,
-          code: '400',
           message: '사용자 정보가 불완전합니다.',
           data: null,
         };
@@ -144,7 +143,6 @@ export class FitnessController {
       if (!exerciseInfo) {
         return {
           isSuccess: false,
-          code: '400',
           message: '운동 정보를 먼저 입력해주세요.',
           data: null,
         };
@@ -164,7 +162,6 @@ export class FitnessController {
       if (!fitnessMeasure || !fitnessMeasure.fitness_result) {
         return {
           isSuccess: false,
-          code: '400',
           message: '체력 측정을 먼저 진행해주세요.',
           data: null,
         };
@@ -196,7 +193,6 @@ export class FitnessController {
       // 7. 응답 생성
       return {
         isSuccess: true,
-        code: '200',
         message: 'AI 운동 추천이 완료되었습니다.',
         data: {
           recommendationId: savedRecommendation.recommendation_id,
@@ -209,7 +205,6 @@ export class FitnessController {
 
       return {
         isSuccess: false,
-        code: '500',
         message: `운동 추천 중 오류가 발생했습니다: ${error.message}`,
         data: null,
       };

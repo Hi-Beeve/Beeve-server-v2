@@ -20,6 +20,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let status: number;
     let message: string | object;
     let error: string;
+    let code: string | undefined;
+    let isSuccess = false;
+    let data: unknown = null;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -27,8 +30,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
       if (typeof exceptionResponse === 'object') {
         const responseObj = exceptionResponse as Record<string, unknown>;
-        message = responseObj.message || exception.message;
+        message = (responseObj.message as string) || exception.message;
         error = (responseObj.error as string) || exception.name;
+        code = responseObj.code as string | undefined;
+        isSuccess = (responseObj.isSuccess as boolean) ?? false;
+        data = responseObj.data ?? null;
       } else {
         message = exceptionResponse;
         error = exception.name;
@@ -48,17 +54,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
       error = 'UnknownError';
     }
 
-    const errorResponse = {
-      statusCode: status,
+    const errorResponse: Record<string, unknown> = {
+      status,
+      isSuccess,
+      code: code || String(status),
+      message,
+      data,
       timestamp: new Date().toISOString(),
       path: request.url,
       method: request.method,
-      error,
-      message,
     };
 
     this.logger.error(
-      `${request.method} ${request.url} ${status} - ${JSON.stringify(message)}`,
+      `${request.method} ${request.url} ${status} - ${code || status} - ${JSON.stringify(message)}`,
     );
 
     response.status(status).json(errorResponse);
