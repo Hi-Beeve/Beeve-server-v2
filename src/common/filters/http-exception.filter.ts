@@ -55,6 +55,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     const errorResponse: Record<string, unknown> = {
+      status,
       isSuccess,
       code: code || String(status),
       message,

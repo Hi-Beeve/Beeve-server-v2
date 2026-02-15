@@ -85,7 +85,6 @@ export class AuthService {
 
     return {
       isSuccess: true,
-      code: '200',
       message: '인증번호가 발송되었습니다.',
       data: {
         expiresAt: expiresAt.toISOString(),
@@ -150,8 +149,7 @@ export class AuthService {
 
       return {
         isSuccess: true,
-        code: '200',
-        message: '인증되었습니다.',
+          message: '인증되었습니다.',
         data: {
           verificationToken,
           phoneNumber,
@@ -264,7 +262,6 @@ export class AuthService {
 
     return {
       isSuccess: true,
-      code: '200',
       data: {
         accessToken: tokens.accessToken,
         tokenType: 'Bearer',
@@ -314,7 +311,6 @@ export class AuthService {
 
     return {
       isSuccess: true,
-      code: '200',
       data: {
         accessToken: tokens.accessToken,
         tokenType: 'Bearer',
@@ -386,7 +382,6 @@ export class AuthService {
 
     return {
       isSuccess: true,
-      code: '200',
       data: {
         accessToken: `Bearer ${accessToken}`,
       },
@@ -434,7 +429,6 @@ export class AuthService {
 
     return {
       isSuccess: true,
-      code: '200',
     };
   }
 

@@ -85,7 +85,6 @@ export class RankService {
 
     return {
       isSuccess: true,
-      code: '200',
       data: {
         currentRank: {
           rank: currentRank,

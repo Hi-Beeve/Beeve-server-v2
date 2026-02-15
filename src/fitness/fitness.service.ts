@@ -189,7 +189,7 @@ export class FitnessService {
 
     return {
       isSuccess: true,
-      code: '200',
+      data: null,
     };
   }
 
@@ -297,7 +297,6 @@ export class FitnessService {
 
     return {
       isSuccess: true,
-      code: '200',
       data: {
         totalGrade,
         totalRank,
@@ -333,11 +332,10 @@ export class FitnessService {
     });
 
     if (!measures || measures.length === 0) {
-      throw new NotFoundException({
-        isSuccess: false,
-        code: 'FITNESS302',
-        message: '체력 측정 기록이 존재하지 않습니다.',
-      });
+      return {
+        isSuccess: true,
+        data: { gradeHistory: [] },
+      };
     }
 
     const gradeHistory = measures.map((m) => {
@@ -355,8 +353,7 @@ export class FitnessService {
 
     return {
       isSuccess: true,
-      code: '200',
-      data: gradeHistory,
+      data: { gradeHistory },
     };
   }
 
