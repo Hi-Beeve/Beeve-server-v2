@@ -59,9 +59,13 @@ export class FitnessService {
       });
     }
 
-    // 4. 하루 1회 제한 체크
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // 4. 하루 1회 제한 체크 (한국 시간 기준)
+    const now = new Date();
+    const kstOffset = 9 * 60 * 60 * 1000; // UTC+9
+    const kstDate = new Date(now.getTime() + kstOffset);
+    const today = new Date(
+      Date.UTC(kstDate.getUTCFullYear(), kstDate.getUTCMonth(), kstDate.getUTCDate())
+    );
 
     const existingMeasure = await this.prisma.fitness_measure.findFirst({
       where: {

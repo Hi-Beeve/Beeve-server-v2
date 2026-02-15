@@ -203,11 +203,13 @@ export class PhoneVerificationService {
 
     const currentCount = count ? Number(count) + 1 : 1;
 
-    // 자정까지 남은 시간 계산
+    // 자정까지 남은 시간 계산 (한국 시간 기준)
     const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setHours(24, 0, 0, 0);
-    const ttl = Math.floor((tomorrow.getTime() - now.getTime()) / 1000);
+    const kstOffset = 9 * 60 * 60 * 1000; // UTC+9
+    const kstNow = new Date(now.getTime() + kstOffset);
+    const kstTomorrow = new Date(kstNow);
+    kstTomorrow.setUTCHours(24, 0, 0, 0);
+    const ttl = Math.floor((kstTomorrow.getTime() - kstNow.getTime()) / 1000);
 
     if (this.redis) {
       await this.redis.setex(key, ttl, String(currentCount));
