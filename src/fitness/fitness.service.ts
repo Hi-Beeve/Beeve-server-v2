@@ -7,6 +7,10 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateFitnessMeasureDto } from './dto/create-fitness-measure.dto';
 import {
+  CreateExerciseInfoDto,
+  HealthIssueType,
+} from './dto/create-exercise-info.dto';
+import {
   calculateAge,
   getAgeRange,
 } from '../common/helpers/age-range.helper';
@@ -19,6 +23,86 @@ export class FitnessService {
 
   constructor(private readonly prisma: PrismaService) {
     this.gradeCalculator = new GradeCalculator(prisma);
+  }
+
+  /**
+   * 운동 정보 조회
+   */
+  async getExerciseInfo(memberId: bigint) {
+    const exerciseInfo =
+      await this.prisma.user_exercise_information.findFirst({
+        where: {
+          member_id: memberId,
+          deleted_yn: 'N',
+        },
+        orderBy: {
+          created_at: 'desc',
+        },
+      });
+
+    if (!exerciseInfo) {
+      return {
+        isSuccess: true,
+        data: null,
+      };
+    }
+
+    return {
+      isSuccess: true,
+      data: {
+        exerciseInfoId: Number(exerciseInfo.exercise_info_id),
+        goal: exerciseInfo.goal,
+        place: exerciseInfo.place,
+        equipment: JSON.parse(exerciseInfo.equipment || '[]'),
+        disease: exerciseInfo.disease,
+        injury: exerciseInfo.injury,
+      },
+    };
+  }
+
+  /**
+   * 운동 정보 등록
+   */
+  async createExerciseInfo(memberId: bigint, dto: CreateExerciseInfoDto) {
+    // 기존 운동 정보 논리 삭제
+    await this.prisma.user_exercise_information.updateMany({
+      where: {
+        member_id: memberId,
+        deleted_yn: 'N',
+      },
+      data: {
+        deleted_yn: 'Y',
+      },
+    });
+
+    const exerciseInfo = await this.prisma.user_exercise_information.create({
+      data: {
+        member_id: memberId,
+        goal: dto.goal,
+        place: dto.place,
+        equipment: JSON.stringify(dto.equipment),
+        disease:
+          dto.healthIssueType === HealthIssueType.DISEASE
+            ? dto.healthIssueText
+            : null,
+        injury:
+          dto.healthIssueType === HealthIssueType.INJURY
+            ? dto.healthIssueText
+            : null,
+      },
+    });
+
+    return {
+      isSuccess: true,
+      data: {
+        exerciseInfoId: Number(exerciseInfo.exercise_info_id),
+        goal: exerciseInfo.goal,
+        place: exerciseInfo.place,
+        equipment: JSON.parse(exerciseInfo.equipment || '[]'),
+        disease: exerciseInfo.disease,
+        injury: exerciseInfo.injury,
+      },
+    };
   }
 
   /**

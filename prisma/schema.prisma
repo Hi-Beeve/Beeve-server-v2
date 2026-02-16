@@ -148,6 +148,7 @@ model user_exercise_information {
   member_id        BigInt
   goal             String    @db.VarChar
   place            String    @db.VarChar
+  equipment        String?   @db.VarChar
   disease          String?   @db.VarChar
   injury           String?   @db.VarChar
   created_at       DateTime  @default(now()) @db.Timestamptz(6)

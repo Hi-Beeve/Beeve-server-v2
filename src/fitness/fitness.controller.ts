@@ -19,7 +19,11 @@ import {
 import { FitnessService } from './fitness.service';
 import { AIRecommenderService } from '../common/services/ai-recommender.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateFitnessMeasureDto, QueryFitnessDto } from './dto';
+import {
+  CreateFitnessMeasureDto,
+  CreateExerciseInfoDto,
+  QueryFitnessDto,
+} from './dto';
 import { CurrentUser } from '../common/decorators';
 import { JwtAuthGuard } from '../common/guards';
 
@@ -50,6 +54,36 @@ export class FitnessController {
     @Body() dto: CreateFitnessMeasureDto,
   ) {
     return this.fitnessService.createFitnessMeasure(memberId, dto);
+  }
+
+  /**
+   * 운동 정보 등록
+   */
+  @Post('exercise-info')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '운동 정보 등록',
+    description:
+      '운동 목표, 장소, 장비, 부상/질병 정보를 등록합니다. 기존 정보가 있으면 논리 삭제 후 새로 등록됩니다.',
+  })
+  @ApiResponse({ status: 200, description: '등록 성공' })
+  @ApiResponse({ status: 400, description: '잘못된 요청' })
+  createExerciseInfo(
+    @CurrentUser('sub') memberId: bigint,
+    @Body() dto: CreateExerciseInfoDto,
+  ) {
+    return this.fitnessService.createExerciseInfo(memberId, dto);
+  }
+
+  /**
+   * 운동 정보 조회
+   */
+  @Get('exercise-info')
+  @ApiOperation({ summary: '운동 정보 조회' })
+  @ApiResponse({ status: 200, description: '조회 성공' })
+  @ApiResponse({ status: 404, description: '운동 정보 없음' })
+  getExerciseInfo(@CurrentUser('sub') memberId: bigint) {
+    return this.fitnessService.getExerciseInfo(memberId);
   }
 
   /**
@@ -103,10 +137,19 @@ export class FitnessController {
     description:
       '사용자의 체력 측정 결과를 기반으로 Gemini AI가 개인 맞춤형 운동 계획을 생성합니다.',
   })
+  @ApiQuery({
+    name: 'measureDay',
+    required: false,
+    description:
+      '조회할 날짜 (YYYY-MM-DD). 미입력 시 가장 최근 측정 데이터 사용',
+  })
   @ApiResponse({ status: 200, description: '추천 성공' })
   @ApiResponse({ status: 400, description: '체력 측정 결과 없음' })
   @ApiResponse({ status: 401, description: '인증 실패' })
-  async getRecommendation(@CurrentUser('sub') memberId: bigint) {
+  async getRecommendation(
+    @CurrentUser('sub') memberId: bigint,
+    @Query() query: QueryFitnessDto,
+  ) {
     this.logger.log(`운동 추천 요청 - 사용자 ID: ${memberId}`);
 
     try {
@@ -148,15 +191,18 @@ export class FitnessController {
         };
       }
 
-      // 3. 최근 체력 측정 결과 조회
+      // 3. 체력 측정 결과 조회 (measureDay 지정 시 해당 날짜, 미지정 시 최근)
       const fitnessMeasure = await this.prisma.fitness_measure.findFirst({
         where: {
           member_id: memberId,
           deleted_yn: 'N',
+          ...(query.measureDay
+            ? { measure_day: new Date(query.measureDay) }
+            : {}),
         },
-        orderBy: {
-          measure_day: 'desc',
-        },
+        ...(!query.measureDay && {
+          orderBy: { measure_day: 'desc' as const },
+        }),
       });
 
       if (!fitnessMeasure || !fitnessMeasure.fitness_result) {
