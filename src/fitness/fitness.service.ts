@@ -22,7 +22,7 @@ export class FitnessService {
   private gradeCalculator: GradeCalculator;
 
   constructor(private readonly prisma: PrismaService) {
-    this.gradeCalculator = new GradeCalculator(prisma);
+    this.gradeCalculator = new GradeCalculator();
   }
 
   /**
@@ -194,7 +194,7 @@ export class FitnessService {
     );
 
     // 8. 각 체력 항목별 등급 계산
-    const strengthResult = await this.gradeCalculator.calculateStrengthGrade(
+    const strengthResult = this.gradeCalculator.calculateStrengthGrade(
       pushUpReps,
       pushUpType,
       member.gender,
@@ -202,7 +202,7 @@ export class FitnessService {
       ageRange.max,
     );
 
-    const cardioResult = await this.gradeCalculator.calculateCardioGrade(
+    const cardioResult = this.gradeCalculator.calculateCardioGrade(
       vo2max,
       dto.stepTestRecoveryBpm,
       member.gender,
@@ -210,7 +210,7 @@ export class FitnessService {
       ageRange.max,
     );
 
-    const enduranceResult = await this.gradeCalculator.calculateEnduranceGrade(
+    const enduranceResult = this.gradeCalculator.calculateEnduranceGrade(
       dto.crossCrunchReps,
       member.gender,
       ageRange.min,
@@ -218,21 +218,21 @@ export class FitnessService {
     );
 
     const flexibilityResult =
-      await this.gradeCalculator.calculateFlexibilityGrade(
+      this.gradeCalculator.calculateFlexibilityGrade(
         dto.sitAndReach,
         member.gender,
         ageRange.min,
         ageRange.max,
       );
 
-    const agilityResult = await this.gradeCalculator.calculateAgilityGrade(
+    const agilityResult = this.gradeCalculator.calculateAgilityGrade(
       dto.reactionTime,
       member.gender,
       ageRange.min,
       ageRange.max,
     );
 
-    const quicknessResult = await this.gradeCalculator.calculateQuicknessGrade(
+    const quicknessResult = this.gradeCalculator.calculateQuicknessGrade(
       dto.flightTime,
       member.gender,
       ageRange.min,

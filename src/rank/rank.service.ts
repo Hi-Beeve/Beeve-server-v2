@@ -8,7 +8,7 @@ export class RankService {
   private gradeCalculator: GradeCalculator;
 
   constructor(private readonly prisma: PrismaService) {
-    this.gradeCalculator = new GradeCalculator(prisma);
+    this.gradeCalculator = new GradeCalculator();
   }
 
   /**

@@ -1,4 +1,4 @@
-import { PrismaService } from '../../prisma/prisma.service';
+import { getStandard } from '../config/program-standard.config';
 
 export interface GradeResult {
   grade: number;
@@ -8,37 +8,27 @@ export interface GradeResult {
 }
 
 /**
- * 체력 등급 계산기
+ * 체력 등급 계산기 (로컬 config 기반)
  */
 export class GradeCalculator {
-  constructor(private readonly prisma: PrismaService) {}
-
   /**
    * 근력 등급 계산
    */
-  async calculateStrengthGrade(
+  calculateStrengthGrade(
     pushUpReps: number,
     pushUpType: 'WALL' | 'KNEE' | 'STANDARD',
     gender: string,
     ageMin: number,
     ageMax: number,
-  ): Promise<GradeResult> {
+  ): GradeResult {
     const weights = { WALL: 0.5, KNEE: 0.7, STANDARD: 1.0 };
     const weightedValue = pushUpReps * weights[pushUpType];
 
-    const standards = await this.prisma.rank_standard.findMany({
-      where: {
-        gender,
-        age_min: { lte: ageMax },
-        age_max: { gte: ageMin },
-      },
-      orderBy: { grade: 'asc' },
-    });
-
     let grade = 4;
-    for (const standard of standards) {
-      if (weightedValue >= Number(standard.push_up_reps) * weights[pushUpType]) {
-        grade = standard.grade;
+    for (const g of [1, 2, 3]) {
+      const standard = getStandard(g, gender, ageMin, ageMax);
+      if (standard && weightedValue >= standard.STRENGTH * weights[pushUpType]) {
+        grade = g;
         break;
       }
     }
@@ -54,26 +44,18 @@ export class GradeCalculator {
   /**
    * 심폐지구력 등급 계산
    */
-  async calculateCardioGrade(
+  calculateCardioGrade(
     vo2max: number,
     recoveryBpm: number,
     gender: string,
     ageMin: number,
     ageMax: number,
-  ): Promise<GradeResult> {
-    const standards = await this.prisma.rank_standard.findMany({
-      where: {
-        gender,
-        age_min: { lte: ageMax },
-        age_max: { gte: ageMin },
-      },
-      orderBy: { grade: 'asc' },
-    });
-
+  ): GradeResult {
     let grade = 4;
-    for (const standard of standards) {
-      if (vo2max >= Number(standard.step_test_vo2max)) {
-        grade = standard.grade;
+    for (const g of [1, 2, 3]) {
+      const standard = getStandard(g, gender, ageMin, ageMax);
+      if (standard && vo2max >= standard.CARDIO) {
+        grade = g;
         break;
       }
     }
@@ -89,25 +71,17 @@ export class GradeCalculator {
   /**
    * 근지구력 등급 계산
    */
-  async calculateEnduranceGrade(
+  calculateEnduranceGrade(
     crossCrunchReps: number,
     gender: string,
     ageMin: number,
     ageMax: number,
-  ): Promise<GradeResult> {
-    const standards = await this.prisma.rank_standard.findMany({
-      where: {
-        gender,
-        age_min: { lte: ageMax },
-        age_max: { gte: ageMin },
-      },
-      orderBy: { grade: 'asc' },
-    });
-
+  ): GradeResult {
     let grade = 4;
-    for (const standard of standards) {
-      if (crossCrunchReps >= standard.cross_crunch_reps) {
-        grade = standard.grade;
+    for (const g of [1, 2, 3]) {
+      const standard = getStandard(g, gender, ageMin, ageMax);
+      if (standard && crossCrunchReps >= standard.ENDURANCE) {
+        grade = g;
         break;
       }
     }
@@ -122,25 +96,17 @@ export class GradeCalculator {
   /**
    * 유연성 등급 계산
    */
-  async calculateFlexibilityGrade(
+  calculateFlexibilityGrade(
     sitAndReach: number,
     gender: string,
     ageMin: number,
     ageMax: number,
-  ): Promise<GradeResult> {
-    const standards = await this.prisma.rank_standard.findMany({
-      where: {
-        gender,
-        age_min: { lte: ageMax },
-        age_max: { gte: ageMin },
-      },
-      orderBy: { grade: 'asc' },
-    });
-
+  ): GradeResult {
     let grade = 4;
-    for (const standard of standards) {
-      if (sitAndReach >= Number(standard.sit_and_reach)) {
-        grade = standard.grade;
+    for (const g of [1, 2, 3]) {
+      const standard = getStandard(g, gender, ageMin, ageMax);
+      if (standard && sitAndReach >= standard.FLEXIBILITY) {
+        grade = g;
         break;
       }
     }
@@ -154,26 +120,19 @@ export class GradeCalculator {
 
   /**
    * 민첩성 등급 계산 (반응시간 - 낮을수록 좋음)
+   * 3등급에 AGILITY 기준값 없음 → 2등급 미달 시 4등급
    */
-  async calculateAgilityGrade(
+  calculateAgilityGrade(
     reactionTime: number,
     gender: string,
     ageMin: number,
     ageMax: number,
-  ): Promise<GradeResult> {
-    const standards = await this.prisma.rank_standard.findMany({
-      where: {
-        gender,
-        age_min: { lte: ageMax },
-        age_max: { gte: ageMin },
-      },
-      orderBy: { grade: 'asc' },
-    });
-
+  ): GradeResult {
     let grade = 4;
-    for (const standard of standards) {
-      if (standard.reaction_time && reactionTime <= Number(standard.reaction_time)) {
-        grade = standard.grade;
+    for (const g of [1, 2, 3]) {
+      const standard = getStandard(g, gender, ageMin, ageMax);
+      if (standard?.AGILITY != null && reactionTime <= standard.AGILITY) {
+        grade = g;
         break;
       }
     }
@@ -187,26 +146,19 @@ export class GradeCalculator {
 
   /**
    * 순발력 등급 계산 (체공시간 - 높을수록 좋음)
+   * 3등급에 QUICKNESS 기준값 없음 → 2등급 미달 시 4등급
    */
-  async calculateQuicknessGrade(
+  calculateQuicknessGrade(
     flightTime: number,
     gender: string,
     ageMin: number,
     ageMax: number,
-  ): Promise<GradeResult> {
-    const standards = await this.prisma.rank_standard.findMany({
-      where: {
-        gender,
-        age_min: { lte: ageMax },
-        age_max: { gte: ageMin },
-      },
-      orderBy: { grade: 'asc' },
-    });
-
+  ): GradeResult {
     let grade = 4;
-    for (const standard of standards) {
-      if (standard.flight_time && flightTime >= Number(standard.flight_time)) {
-        grade = standard.grade;
+    for (const g of [1, 2, 3]) {
+      const standard = getStandard(g, gender, ageMin, ageMax);
+      if (standard?.QUICKNESS != null && flightTime >= standard.QUICKNESS) {
+        grade = g;
         break;
       }
     }
