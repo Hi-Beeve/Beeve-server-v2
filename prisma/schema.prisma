@@ -95,20 +95,6 @@ model member {
   user_exercise_information user_exercise_information[]
 }
 
-model rank_standard {
-  rank_standard_id  BigInt   @id @default(autoincrement())
-  gender            String   @db.VarChar
-  age_min           Int      @db.SmallInt
-  age_max           Int      @db.SmallInt
-  grade             Int      @db.SmallInt
-  push_up_reps      Int      @db.SmallInt
-  step_test_vo2max  Decimal  @db.Decimal
-  cross_crunch_reps Int      @db.SmallInt
-  sit_and_reach     Decimal  @db.Decimal
-  reaction_time     Decimal? @db.Decimal
-  flight_time       Decimal? @db.Decimal
-  @@index([gender, age_min, age_max, grade])
-}
 
 model recommendation_feedback {
   feedback_id          BigInt               @id @default(autoincrement())
