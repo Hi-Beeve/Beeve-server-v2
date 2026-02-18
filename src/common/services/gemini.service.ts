@@ -19,15 +19,16 @@ export class GeminiService {
 
     this.genAI = new GoogleGenerativeAI(apiKey);
     
-    // Gemini 2.5 Flash 모델 사용 (빠르고 저렴, 최신 버전!)
-    this.model = this.genAI.getGenerativeModel({ 
-      model: 'gemini-2.5-flash',
+    // Gemini 2.0 Flash 모델 사용 (빠르고 안정적)
+    this.model = this.genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash',
       generationConfig: {
-        temperature: 0.7,  // 창의성 (0.0 ~ 1.0)
+        temperature: 0.7,
         topP: 0.95,
         topK: 64,
-        maxOutputTokens: 2048,
-      }
+        maxOutputTokens: 8192,
+        responseMimeType: 'application/json',
+      } as any,
     });
   }
 
@@ -63,17 +64,20 @@ export class GeminiService {
     try {
       text = await this.generateContent(prompt);
 
-      // JSON 블록 추출 (```json ... ``` 형식)
-      const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
-      const jsonText = jsonMatch ? jsonMatch[1] : text;
+      // responseMimeType이 application/json이면 바로 파싱 가능
+      // fallback: ```json ... ``` 블록 추출
+      let jsonText = text;
+      const jsonMatch = text.match(/```json\s*\n([\s\S]*?)(?:\n```|$)/);
+      if (jsonMatch) {
+        jsonText = jsonMatch[1];
+      }
 
-      // JSON 파싱
       const parsed = JSON.parse(jsonText.trim());
 
       return parsed as T;
     } catch (error) {
       this.logger.error('JSON 파싱 실패:', error);
-      this.logger.error('원본 텍스트:', text);
+      this.logger.error('원본 텍스트:', text.substring(0, 500));
       throw new Error(`Failed to parse Gemini response as JSON: ${error.message}`);
     }
   }

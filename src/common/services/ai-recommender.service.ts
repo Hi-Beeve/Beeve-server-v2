@@ -121,10 +121,9 @@ export class AIRecommenderService {
       })
       .join('\n');
 
-    // 운동 목록 텍스트 생성 (상위 50개만)
+    // 운동 목록 텍스트 생성 (ID 포함)
     const exerciseList = exercises
-      .slice(0, 50)
-      .map((ex, i) => `${i + 1}. ${ex.exercise_name}`)
+      .map((ex) => `- [ID:${ex.exercise_id}] ${ex.exercise_name} (${ex.fitness_type || '기타'})`)
       .join('\n');
 
     // 장소 한글 변환
@@ -146,13 +145,12 @@ ${userInfo.disease ? `- 질병: ${userInfo.disease}` : ''}
 # 체력 측정 결과 (1등급=최상, 4등급=부족)
 ${fitnessText}
 
-# 가능한 운동 목록
+# DB 등록된 운동 목록 (우선 사용)
 ${exerciseList}
-(... 총 ${exercises.length}개 운동 중 일부)
 
 # 요구사항
 1. **가장 부족한 체력 요소를 targetFitnessType으로 선택**
-   - CARDIO(심폐지구력), ENDURANCE(근지구력), FLEXIBILITY(유연성), 
+   - CARDIO(심폐지구력), ENDURANCE(근지구력), FLEXIBILITY(유연성),
    - STRENGTH(근력), QUICKNESS(순발력), AGILITY(민첩성) 중 선택
 
 2. **주 3일 운동 계획 수립**
@@ -175,8 +173,11 @@ ${exerciseList}
    - 예상 개선 효과
    - 동기부여 메시지
 
-# 출력 형식 (JSON만 출력, 다른 텍스트 절대 포함 금지)
-\`\`\`json
+6. **운동 선택 규칙**
+   - 가능하면 위 DB 목록의 운동을 사용하고, exerciseId에 해당 ID 값을 넣어라
+   - DB 목록에 적합한 운동이 없을 때만 새 운동을 추가하되, exerciseId를 null로 설정하고 newExerciseInfo를 반드시 포함해라
+
+# 출력 형식 (JSON만 출력)
 {
   "targetFitnessType": "CARDIO",
   "totalDuration": 45,
@@ -189,13 +190,32 @@ ${exerciseList}
       "cool_down": "5분 정적 스트레칭 + 심호흡",
       "exercises": [
         {
+          "exerciseId": 10,
           "name": "인터벌 러닝(400m)",
           "sets": 3,
           "reps": 1,
           "duration": 3,
           "rest_seconds": 90,
           "rpe": 7,
-          "description": "400m 전력질주 후 휴식, 심폐지구력 향상에 효과적"
+          "description": "400m 전력질주 후 휴식, 심폐지구력 향상에 효과적",
+          "newExerciseInfo": null
+        },
+        {
+          "exerciseId": null,
+          "name": "버피 점프",
+          "sets": 3,
+          "reps": 10,
+          "duration": null,
+          "rest_seconds": 60,
+          "rpe": 8,
+          "description": "전신 유산소 운동",
+          "newExerciseInfo": {
+            "exercise_step": "1. 서서 시작 2. 스쿼트 자세로 내려감 3. 플랭크 자세로 점프 4. 다시 일어서며 점프",
+            "equipment": "없음",
+            "caution": "무릎 부상 주의, 착지 시 충격 최소화",
+            "fitness_type": "CARDIO",
+            "purpose": "전신 유산소 및 근력 향상"
+          }
         }
       ]
     },
@@ -214,11 +234,8 @@ ${exerciseList}
       "exercises": [...]
     }
   ],
-  "notes": "심폐지구력이 가장 부족하니 유산소 운동을 집중적으로 진행하세요. 주 3회 꾸준히 실시하면 2개월 내 2등급 달성 가능합니다. 유연성도 함께 개선하면 부상 위험을 30% 줄일 수 있습니다."
-}
-\`\`\`
-
-**중요: 반드시 위 JSON 형식만 출력하세요. 추가 설명이나 마크다운 문법은 넣지 마세요.**`;
+  "notes": "심폐지구력이 가장 부족하니 유산소 운동을 집중적으로 진행하세요."
+}`;
   }
 
   /**

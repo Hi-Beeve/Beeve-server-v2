@@ -129,11 +129,36 @@ export class FitnessController {
   }
 
   /**
-   * AI 기반 운동 추천
+   * 저장된 추천 운동 조회
    */
   @Get('recommend')
   @ApiOperation({
-    summary: 'AI 운동 추천',
+    summary: '저장된 추천 운동 조회',
+    description:
+      '저장된 AI 추천 운동 데이터를 조회합니다. measureDay 지정 시 해당 날짜, 미지정 시 가장 최근 데이터를 반환합니다.',
+  })
+  @ApiQuery({
+    name: 'measureDay',
+    required: false,
+    description:
+      '조회할 날짜 (YYYY-MM-DD). 미입력 시 가장 최근 추천 데이터 반환',
+  })
+  @ApiResponse({ status: 200, description: '조회 성공' })
+  @ApiResponse({ status: 401, description: '인증 실패' })
+  getRecommendation(
+    @CurrentUser('sub') memberId: bigint,
+    @Query() query: QueryFitnessDto,
+  ) {
+    return this.fitnessService.getRecommendation(memberId, query.measureDay);
+  }
+
+  /**
+   * AI 기반 운동 추천 생성
+   */
+  @Post('recommend')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'AI 운동 추천 생성',
     description:
       '사용자의 체력 측정 결과를 기반으로 Gemini AI가 개인 맞춤형 운동 계획을 생성합니다.',
   })
@@ -141,12 +166,12 @@ export class FitnessController {
     name: 'measureDay',
     required: false,
     description:
-      '조회할 날짜 (YYYY-MM-DD). 미입력 시 가장 최근 측정 데이터 사용',
+      '기반 측정 날짜 (YYYY-MM-DD). 미입력 시 가장 최근 측정 데이터 사용',
   })
-  @ApiResponse({ status: 200, description: '추천 성공' })
+  @ApiResponse({ status: 200, description: '추천 생성 성공' })
   @ApiResponse({ status: 400, description: '체력 측정 결과 없음' })
   @ApiResponse({ status: 401, description: '인증 실패' })
-  async getRecommendation(
+  async createRecommendation(
     @CurrentUser('sub') memberId: bigint,
     @Query() query: QueryFitnessDto,
   ) {
@@ -236,13 +261,32 @@ export class FitnessController {
         recommendation,
       );
 
-      // 7. 응답 생성
+      // 7. 응답 생성 (FE에 필요한 필드만 반환)
       return {
         isSuccess: true,
         message: 'AI 운동 추천이 완료되었습니다.',
         data: {
-          recommendationId: savedRecommendation.recommendation_id,
-          ...recommendation,
+          recommendationId: Number(savedRecommendation.recommendation_id),
+          targetFitnessType: recommendation.targetFitnessType,
+          totalDuration: recommendation.totalDuration,
+          rpe: recommendation.rpe,
+          workout_plan: recommendation.workout_plan.map((day: any) => ({
+            date: day.date,
+            focus: day.focus,
+            warm_up: day.warm_up,
+            cool_down: day.cool_down,
+            exercises: day.exercises.map((ex: any) => ({
+              exerciseId: ex.exerciseId ? Number(ex.exerciseId) : undefined,
+              name: ex.name,
+              sets: ex.sets,
+              reps: ex.reps,
+              duration: ex.duration ?? null,
+              rest_seconds: ex.rest_seconds,
+              rpe: ex.rpe,
+              description: ex.description,
+            })),
+          })),
+          notes: recommendation.notes,
           createdAt: new Date().toISOString(),
         },
       };
@@ -279,7 +323,9 @@ export class FitnessController {
         total_duration: recommendation.totalDuration,
         rpe: recommendation.rpe,
         target_fitness_type: recommendation.targetFitnessType,
-        ai_response: JSON.stringify(recommendation),
+        ai_response: JSON.stringify(recommendation, (_, v) =>
+          typeof v === 'bigint' ? Number(v) : v,
+        ),
         status: 'ACTIVE',
         deleted_yn: 'N',
       },
@@ -288,17 +334,33 @@ export class FitnessController {
     // 운동 상세 저장
     for (const day of recommendation.workout_plan) {
       for (const exercise of day.exercises) {
-        // exercise_program에서 exercise_id 찾기
-        let exerciseId = exercise.exerciseId;
+        let exerciseId = exercise.exerciseId
+          ? BigInt(exercise.exerciseId)
+          : null;
 
+        // exerciseId가 없으면 운동명으로 DB 검색
         if (!exerciseId) {
-          const exerciseProgram =
-            await this.prisma.exercise_program.findFirst({
-              where: {
-                exercise_name: exercise.name,
-              },
-            });
-          exerciseId = exerciseProgram?.exercise_id || BigInt(1);
+          const existing = await this.prisma.exercise_program.findFirst({
+            where: { exercise_name: exercise.name },
+          });
+          exerciseId = existing?.exercise_id || null;
+        }
+
+        // 여전히 없으면 새 운동으로 exercise_program에 추가
+        if (!exerciseId) {
+          const info = exercise.newExerciseInfo;
+          const newProgram = await this.prisma.exercise_program.create({
+            data: {
+              exercise_name: exercise.name,
+              exercise_step: info?.exercise_step || null,
+              equipment: info?.equipment || null,
+              caution: info?.caution || null,
+              fitness_type: info?.fitness_type || null,
+              purpose: info?.purpose || null,
+            },
+          });
+          exerciseId = newProgram.exercise_id;
+          this.logger.log(`새 운동 등록: ${exercise.name} (ID: ${exerciseId})`);
         }
 
         await this.prisma.daily_recommendation_exercise.create({

@@ -169,7 +169,7 @@ export class PhoneVerificationService {
   }
 
   /**
-   * 발송 제한 체크 (1분에 1회)
+   * 발송 제한 체크 (3분에 1회)
    */
   async checkRateLimit(phoneNumber: string): Promise<boolean> {
     const key = `phone_ratelimit:${phoneNumber}`;
@@ -177,10 +177,10 @@ export class PhoneVerificationService {
     if (this.redis) {
       const exists = await this.redis.exists(key);
       if (exists) return false;
-      await this.redis.setex(key, 60, '1');
+      await this.redis.setex(key, 180, '1');
     } else {
       if (this.memoryExists(key)) return false;
-      this.memorySet(key, '1', 60);
+      this.memorySet(key, '1', 180);
     }
 
     return true;

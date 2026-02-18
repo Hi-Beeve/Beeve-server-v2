@@ -442,6 +442,64 @@ export class FitnessService {
   }
 
   /**
+   * 저장된 추천 운동 조회 (날짜별 또는 최신)
+   */
+  async getRecommendation(memberId: bigint, measureDay?: string) {
+    const recommendation = await this.prisma.daily_recommendation.findFirst({
+      where: {
+        member_id: memberId,
+        deleted_yn: 'N',
+        status: 'ACTIVE',
+        ...(measureDay
+          ? { recommendation_date: new Date(measureDay) }
+          : {}),
+      },
+      orderBy: {
+        recommendation_date: 'desc',
+      },
+    });
+
+    if (!recommendation) {
+      return {
+        isSuccess: true,
+        message: '추천 운동 조회 성공',
+        data: null,
+      };
+    }
+
+    const aiResponse = JSON.parse(recommendation.ai_response as string);
+
+    return {
+      isSuccess: true,
+      message: '추천 운동 조회 성공',
+      data: {
+        recommendationId: Number(recommendation.recommendation_id),
+        targetFitnessType: aiResponse.targetFitnessType,
+        totalDuration: aiResponse.totalDuration,
+        rpe: aiResponse.rpe,
+        workout_plan: (aiResponse.workout_plan || []).map((day: any) => ({
+          date: day.date,
+          focus: day.focus,
+          warm_up: day.warm_up,
+          cool_down: day.cool_down,
+          exercises: (day.exercises || []).map((ex: any) => ({
+            exerciseId: ex.exerciseId ?? undefined,
+            name: ex.name,
+            sets: ex.sets,
+            reps: ex.reps,
+            duration: ex.duration ?? null,
+            rest_seconds: ex.rest_seconds,
+            rpe: ex.rpe,
+            description: ex.description,
+          })),
+        })),
+        notes: aiResponse.notes,
+        createdAt: recommendation.recommendation_date.toISOString(),
+      },
+    };
+  }
+
+  /**
    * 순위 계산 (Helper)
    */
   private async calculateRank(
