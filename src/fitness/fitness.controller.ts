@@ -23,6 +23,7 @@ import {
   CreateFitnessMeasureDto,
   CreateExerciseInfoDto,
   QueryFitnessDto,
+  QueryRecommendDto,
 } from './dto';
 import { CurrentUser } from '../common/decorators';
 import { JwtAuthGuard } from '../common/guards';
@@ -138,18 +139,18 @@ export class FitnessController {
       '저장된 AI 추천 운동 데이터를 조회합니다. measureDay 지정 시 해당 날짜, 미지정 시 가장 최근 데이터를 반환합니다.',
   })
   @ApiQuery({
-    name: 'measureDay',
+    name: 'recommendDate',
     required: false,
     description:
-      '조회할 날짜 (YYYY-MM-DD). 미입력 시 가장 최근 추천 데이터 반환',
+      '조회할 추천 날짜 (YYYY-MM-DD). 미입력 시 가장 최근 추천 데이터 반환',
   })
   @ApiResponse({ status: 200, description: '조회 성공' })
   @ApiResponse({ status: 401, description: '인증 실패' })
   getRecommendation(
     @CurrentUser('sub') memberId: bigint,
-    @Query() query: QueryFitnessDto,
+    @Query() query: QueryRecommendDto,
   ) {
-    return this.fitnessService.getRecommendation(memberId, query.measureDay);
+    return this.fitnessService.getRecommendation(memberId, query.recommendDate);
   }
 
   /**
@@ -160,20 +161,13 @@ export class FitnessController {
   @ApiOperation({
     summary: 'AI 운동 추천 생성',
     description:
-      '사용자의 체력 측정 결과를 기반으로 Gemini AI가 개인 맞춤형 운동 계획을 생성합니다.',
-  })
-  @ApiQuery({
-    name: 'measureDay',
-    required: false,
-    description:
-      '기반 측정 날짜 (YYYY-MM-DD). 미입력 시 가장 최근 측정 데이터 사용',
+      '사용자의 가장 최근 체력 측정 결과(28일 이내)를 기반으로 Gemini AI가 개인 맞춤형 운동 계획을 생성합니다.',
   })
   @ApiResponse({ status: 200, description: '추천 생성 성공' })
   @ApiResponse({ status: 400, description: '체력 측정 결과 없음' })
   @ApiResponse({ status: 401, description: '인증 실패' })
   async createRecommendation(
     @CurrentUser('sub') memberId: bigint,
-    @Query() query: QueryFitnessDto,
   ) {
     this.logger.log(`운동 추천 요청 - 사용자 ID: ${memberId}`);
 
@@ -216,24 +210,31 @@ export class FitnessController {
         };
       }
 
-      // 3. 체력 측정 결과 조회 (measureDay 지정 시 해당 날짜, 미지정 시 최근)
+      // 3. 최근 28일 이내 체력 측정 결과 조회
+      const now = new Date();
+      const kstOffset = 9 * 60 * 60 * 1000;
+      const kstNow = new Date(now.getTime() + kstOffset);
+      const today = new Date(
+        Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth(), kstNow.getUTCDate()),
+      );
+      const twentyEightDaysAgo = new Date(today.getTime() - 28 * 24 * 60 * 60 * 1000);
+
       const fitnessMeasure = await this.prisma.fitness_measure.findFirst({
         where: {
           member_id: memberId,
           deleted_yn: 'N',
-          ...(query.measureDay
-            ? { measure_day: new Date(query.measureDay) }
-            : {}),
+          measure_day: {
+            gte: twentyEightDaysAgo,
+            lte: today,
+          },
         },
-        ...(!query.measureDay && {
-          orderBy: { measure_day: 'desc' as const },
-        }),
+        orderBy: { measure_day: 'desc' },
       });
 
       if (!fitnessMeasure || !fitnessMeasure.fitness_result) {
         return {
           isSuccess: false,
-          message: '체력 측정을 먼저 진행해주세요.',
+          message: '28일 이내 체력 측정 기록이 없습니다. 체력 측정을 먼저 진행해주세요.',
           data: null,
         };
       }
@@ -270,21 +271,18 @@ export class FitnessController {
           targetFitnessType: recommendation.targetFitnessType,
           totalDuration: recommendation.totalDuration,
           rpe: recommendation.rpe,
-          workout_plan: recommendation.workout_plan.map((day: any) => ({
-            date: day.date,
-            focus: day.focus,
-            warm_up: day.warm_up,
-            cool_down: day.cool_down,
-            exercises: day.exercises.map((ex: any) => ({
-              exerciseId: ex.exerciseId ? Number(ex.exerciseId) : undefined,
-              name: ex.name,
-              sets: ex.sets,
-              reps: ex.reps,
-              duration: ex.duration ?? null,
-              rest_seconds: ex.rest_seconds,
-              rpe: ex.rpe,
-              description: ex.description,
-            })),
+          focus: recommendation.focus,
+          warm_up: recommendation.warm_up,
+          cool_down: recommendation.cool_down,
+          exercises: (recommendation.exercises || []).map((ex: any) => ({
+            exerciseId: ex.exerciseId ? Number(ex.exerciseId) : undefined,
+            name: ex.name,
+            sets: ex.sets,
+            reps: ex.reps,
+            duration: ex.duration ?? null,
+            rest_seconds: ex.rest_seconds,
+            rpe: ex.rpe,
+            description: ex.description,
           })),
           notes: recommendation.notes,
           createdAt: new Date().toISOString(),
@@ -332,8 +330,7 @@ export class FitnessController {
     });
 
     // 운동 상세 저장
-    for (const day of recommendation.workout_plan) {
-      for (const exercise of day.exercises) {
+    for (const exercise of recommendation.exercises) {
         let exerciseId = exercise.exerciseId
           ? BigInt(exercise.exerciseId)
           : null;
@@ -374,7 +371,6 @@ export class FitnessController {
             duration: exercise.duration,
           },
         });
-      }
     }
 
     return dailyRecommendation;

@@ -328,11 +328,7 @@ export class FitnessService {
       });
 
       if (!measure) {
-        throw new NotFoundException({
-          isSuccess: false,
-          code: 'FITNESS302',
-          message: '해당 날짜의 체력 측정 기록이 존재하지 않습니다.',
-        });
+        return { isSuccess: true, data: null };
       }
     } else {
       // 날짜가 없는 경우 가장 최근 기록 조회
@@ -348,7 +344,7 @@ export class FitnessService {
 
       if (!measure) {
         // 측정 기록이 전혀 없는 경우 빈 응답
-        return { data: null };
+        return { isSuccess: true, data: null };
       }
     }
 
@@ -444,14 +440,19 @@ export class FitnessService {
   /**
    * 저장된 추천 운동 조회 (날짜별 또는 최신)
    */
-  async getRecommendation(memberId: bigint, measureDay?: string) {
+  async getRecommendation(memberId: bigint, recommendDate?: string) {
     const recommendation = await this.prisma.daily_recommendation.findFirst({
       where: {
         member_id: memberId,
         deleted_yn: 'N',
         status: 'ACTIVE',
-        ...(measureDay
-          ? { recommendation_date: new Date(measureDay) }
+        ...(recommendDate
+          ? {
+              recommendation_date: {
+                gte: new Date(`${recommendDate}T00:00:00.000Z`),
+                lt: new Date(`${recommendDate}T23:59:59.999Z`),
+              },
+            }
           : {}),
       },
       orderBy: {
@@ -477,21 +478,18 @@ export class FitnessService {
         targetFitnessType: aiResponse.targetFitnessType,
         totalDuration: aiResponse.totalDuration,
         rpe: aiResponse.rpe,
-        workout_plan: (aiResponse.workout_plan || []).map((day: any) => ({
-          date: day.date,
-          focus: day.focus,
-          warm_up: day.warm_up,
-          cool_down: day.cool_down,
-          exercises: (day.exercises || []).map((ex: any) => ({
-            exerciseId: ex.exerciseId ?? undefined,
-            name: ex.name,
-            sets: ex.sets,
-            reps: ex.reps,
-            duration: ex.duration ?? null,
-            rest_seconds: ex.rest_seconds,
-            rpe: ex.rpe,
-            description: ex.description,
-          })),
+        focus: aiResponse.focus,
+        warm_up: aiResponse.warm_up,
+        cool_down: aiResponse.cool_down,
+        exercises: (aiResponse.exercises || []).map((ex: any) => ({
+          exerciseId: ex.exerciseId ?? undefined,
+          name: ex.name,
+          sets: ex.sets,
+          reps: ex.reps,
+          duration: ex.duration ?? null,
+          rest_seconds: ex.rest_seconds,
+          rpe: ex.rpe,
+          description: ex.description,
         })),
         notes: aiResponse.notes,
         createdAt: recommendation.recommendation_date.toISOString(),
