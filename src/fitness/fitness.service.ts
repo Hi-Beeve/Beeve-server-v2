@@ -498,7 +498,7 @@ export class FitnessService {
   }
 
   /**
-   * 순위 계산 (Helper)
+   * 순위 계산 (공공 데이터 + 회원 데이터 합산)
    */
   private async calculateRank(
     memberId: bigint,
@@ -506,50 +506,92 @@ export class FitnessService {
   ): Promise<number> {
     const ageRange = myMeasure.age_range as any;
 
-    // 동년배 전체 측정 기록 조회
-    const allMeasures = await this.prisma.fitness_measure.findMany({
+    // 동성별 + 동연령대 공공 데이터 조회
+    const publicData = await this.prisma.public_fitness_rank.findMany({
       where: {
         gender: myMeasure.gender,
-        age: {
-          gte: ageRange.min,
-          lte: ageRange.max,
-        },
-        deleted_yn: 'N',
-      },
-      select: {
-        member_id: true,
-        fitness_result: true,
+        age_min: ageRange.min,
+        age_max: ageRange.max,
       },
     });
 
-    // 내 등급 계산
-    const myResult = myMeasure.fitness_result as any;
-    const myGrades = Object.values(myResult).map((data: any) => data.grade);
-    const myAvgGrade = myGrades.reduce((a, b) => a + b, 0) / myGrades.length;
+    // 동성별 + 동연령대 회원 데이터 조회 (member_id별 최신 1건, 본인 제외)
+    const memberMeasures = await this.prisma.fitness_measure.findMany({
+      where: {
+        gender: myMeasure.gender,
+        deleted_yn: 'N',
+        NOT: { member_id: memberId },
+        age_range: {
+          equals: { min: ageRange.min, max: ageRange.max },
+        },
+      },
+      orderBy: {
+        measure_day: 'desc',
+      },
+    });
 
-    // 순위 계산
-    let rank = 1;
-    const processedUsers = new Set<bigint>();
-
-    for (const measure of allMeasures) {
-      if (!measure.member_id) continue;
-
-      if (
-        measure.member_id === memberId ||
-        processedUsers.has(measure.member_id)
-      ) {
-        continue;
+    // member_id별 최신 1건만 추출
+    const latestByMember = new Map<bigint, (typeof memberMeasures)[0]>();
+    for (const m of memberMeasures) {
+      if (m.member_id && !latestByMember.has(m.member_id)) {
+        latestByMember.set(m.member_id, m);
       }
+    }
 
-      const result = measure.fitness_result as any;
-      const grades = Object.values(result).map((data: any) => data.grade);
-      const avgGrade = grades.reduce((a, b) => a + b, 0) / grades.length;
+    // 내 등급 계산 (공공 데이터와 비교 가능한 5개 항목만)
+    const myResult = myMeasure.fitness_result as any;
+    const myGradeValues = [
+      myResult.CARDIO?.grade,
+      myResult.ENDURANCE?.grade,
+      myResult.FLEXIBILITY?.grade,
+      myResult.QUICKNESS?.grade,
+      myResult.AGILITY?.grade,
+    ].filter((v) => v !== undefined && v !== null) as number[];
+
+    const myAvgGrade = myGradeValues.length > 0
+      ? myGradeValues.reduce((a, b) => a + b, 0) / myGradeValues.length
+      : 4;
+
+    // 합산 순위 계산
+    let rank = 1;
+
+    // 공공 데이터와 비교
+    for (const person of publicData) {
+      const personGrades = [
+        person.cardio_grade,
+        person.endurance_grade,
+        person.flexibility_grade,
+        person.quickness_grade,
+        person.agility_grade,
+      ].filter((v) => v !== undefined && v !== null) as number[];
+
+      const personAvgGrade = personGrades.length > 0
+        ? personGrades.reduce((a, b) => a + b, 0) / personGrades.length
+        : 4;
+
+      if (personAvgGrade < myAvgGrade) {
+        rank++;
+      }
+    }
+
+    // 회원 데이터와 비교
+    for (const m of latestByMember.values()) {
+      const result = m.fitness_result as any;
+      const gradeValues = [
+        result.CARDIO?.grade,
+        result.ENDURANCE?.grade,
+        result.FLEXIBILITY?.grade,
+        result.QUICKNESS?.grade,
+        result.AGILITY?.grade,
+      ].filter((v) => v !== undefined && v !== null) as number[];
+
+      const avgGrade = gradeValues.length > 0
+        ? gradeValues.reduce((a, b) => a + b, 0) / gradeValues.length
+        : 4;
 
       if (avgGrade < myAvgGrade) {
         rank++;
       }
-
-      processedUsers.add(measure.member_id);
     }
 
     return rank;
