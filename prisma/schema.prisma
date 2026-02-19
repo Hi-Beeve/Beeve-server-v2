@@ -145,14 +145,12 @@ model user_exercise_information {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model public_fitness_rank {
-  public_fitness_rank_id BigInt @id @default(autoincrement())
-  gender                 String @db.VarChar
-  cardio_grade           Int?   @db.SmallInt
-  endurance_grade        Int?   @db.SmallInt
-  flexibility_grade      Int?   @db.SmallInt
-  quickness_grade        Int?   @db.SmallInt
-  agility_grade          Int?   @db.SmallInt
-  age_min                Int?   @db.SmallInt
-  age_max                Int?   @db.SmallInt
+model fitness_percentile_standard {
+  fitness_percentile_standard_id BigInt   @id @default(autoincrement())
+  gender                         String   @db.VarChar
+  min_age                        Int?     @db.SmallInt
+  max_age                        Int?     @db.SmallInt
+  fitness                        String?  @db.VarChar
+  percentile_rank                Int?     @db.SmallInt
+  threshold_value                Decimal? @db.Decimal
 }
