@@ -1,7 +1,12 @@
-# Build stage
+# =========================================
+# Build Stage
+# =========================================
 FROM node:20-alpine AS builder
 
 WORKDIR /app
+
+# ✅ OpenSSL 설치 (Alpine에서 Prisma 실행에 필요)
+RUN apk add --no-cache openssl
 
 # Copy package files
 COPY package*.json ./
@@ -13,46 +18,37 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Generate Prisma client
+# Generate Prisma Client
 RUN npx prisma generate
 
 # Build application
 RUN npm run build
 
-# Production stage
-FROM node:20-alpine AS production
+# =========================================
+# Production Stage
+# =========================================
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nestjs -u 1001
+# ✅ OpenSSL 설치 (런타임에도 필요!)
+RUN apk add --no-cache openssl
 
 # Copy package files
 COPY package*.json ./
+COPY prisma ./prisma/
 
 # Install production dependencies only
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
-# Copy Prisma schema and generate client
-COPY prisma ./prisma/
+# Generate Prisma Client
 RUN npx prisma generate
 
-# Copy built application from builder
+# Copy built application
 COPY --from=builder /app/dist ./dist
 
-# Create logs directory
-RUN mkdir -p logs && chown -R nestjs:nodejs logs
-
-# Switch to non-root user
-USER nestjs
-
 # Expose port
-EXPOSE 3000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+EXPOSE 8080
 
 # Start application
-CMD ["node", "dist/main"]
+CMD ["node", "dist/main.js"]

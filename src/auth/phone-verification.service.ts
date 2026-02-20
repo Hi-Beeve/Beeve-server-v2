@@ -230,7 +230,7 @@ export class PhoneVerificationService {
     };
 
     return this.jwtService.sign(payload, {
-      secret: this.configService.get('JWT_ACCESS_SECRET'),
+      secret: this.configService.get('JWT_SECRET'),
       expiresIn: '10m',
     });
   }
@@ -241,7 +241,7 @@ export class PhoneVerificationService {
   verifyToken(phoneNumber: string, token: string): boolean {
     try {
       const payload = this.jwtService.verify(token, {
-        secret: this.configService.get('JWT_ACCESS_SECRET'),
+        secret: this.configService.get('JWT_SECRET'),
       });
 
       return (

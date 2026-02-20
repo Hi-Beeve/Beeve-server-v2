@@ -375,7 +375,7 @@ export class AuthService {
     const accessToken = this.jwtService.sign(
       { sub: payload.sub },
       {
-        secret: this.configService.get('JWT_ACCESS_SECRET'),
+        secret: this.configService.get('JWT_SECRET'),
         expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION'),
       },
     );
@@ -440,7 +440,7 @@ export class AuthService {
     const payload = { sub: memberId.toString() };
 
     const accessToken = this.jwtService.sign(payload, {
-      secret: this.configService.get('JWT_ACCESS_SECRET'),
+      secret: this.configService.get('JWT_SECRET'),
       expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION'),
     });
 
