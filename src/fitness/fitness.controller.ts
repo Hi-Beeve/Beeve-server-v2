@@ -365,10 +365,10 @@ export class FitnessController {
             recommendation_id: dailyRecommendation.recommendation_id,
             exercise_id: exerciseId,
             exercise_name: exercise.name,
-            reps: exercise.reps,
-            sets: exercise.sets,
-            rest_seconds: exercise.rest_seconds,
-            duration: exercise.duration,
+            reps: typeof exercise.reps === 'number' ? exercise.reps : null,
+            sets: typeof exercise.sets === 'number' ? exercise.sets : null,
+            rest_seconds: typeof exercise.rest_seconds === 'number' ? exercise.rest_seconds : null,
+            duration: typeof exercise.duration === 'number' ? exercise.duration : null,
           },
         });
     }
