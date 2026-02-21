@@ -19,9 +19,9 @@ export class GeminiService {
 
     this.genAI = new GoogleGenerativeAI(apiKey);
     
-    // Gemini 2.0 Flash 모델 사용 (빠르고 안정적)
+    // Gemini 2.5 Flash 모델 사용
     this.model = this.genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       generationConfig: {
         temperature: 0.7,
         topP: 0.95,
