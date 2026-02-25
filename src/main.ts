@@ -32,7 +32,7 @@ async function bootstrap() {
     origin:
       nodeEnv === 'development'
         ? true
-        : ['https://beeve.kr', 'https://www.beeve.kr'],
+        : ['https://beeve.kr', 'https://www.beeve.kr', 'https://beeve-web.vercel.app'],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
