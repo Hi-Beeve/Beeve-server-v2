@@ -73,10 +73,6 @@ export class PhoneVerificationService {
    * 인증번호 생성 (6자리 숫자)
    */
   generateCode(): string {
-    // 개발 환경에서는 고정값 사용
-    if (this.configService.get('NODE_ENV') === 'development') {
-      return '123456';
-    }
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
