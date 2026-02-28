@@ -36,3 +36,6 @@ images:
   - 'gcr.io/$PROJECT_ID/beeve-api:latest'
 
 timeout: '1200s'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
