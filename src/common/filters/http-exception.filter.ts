@@ -66,9 +66,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
     };
 
     this.logger.error(
-      `${request.method} ${request.url} ${status} - ${code || status} - ${JSON.stringify(message)}`,
+      `${request.method} ${request.url} ${status} - ${code || status} - ${JSON.stringify(message)} - body: ${JSON.stringify(this.sanitizeBody(request.body))}`,
     );
 
     response.status(status).json(errorResponse);
+  }
+
+  private sanitizeBody(body: Record<string, unknown>): Record<string, unknown> {
+    if (!body || typeof body !== 'object') return {};
+    const SENSITIVE_KEYS = ['password', 'token', 'refreshToken', 'accessToken', 'secret', 'verificationToken'];
+    return Object.fromEntries(
+      Object.entries(body).map(([k, v]) =>
+        SENSITIVE_KEYS.includes(k) ? [k, '***'] : [k, v],
+      ),
+    );
   }
 }
