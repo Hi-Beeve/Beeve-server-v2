@@ -508,7 +508,7 @@ export class FitnessService {
     const standards =
       await this.prisma.fitness_percentile_standard.findMany({
         where: {
-          gender: myMeasure.gender,
+          gender: myMeasure.gender === 'male' ? 'M' : 'F',
           min_age: ageRange.min,
           max_age: ageRange.max,
         },

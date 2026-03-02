@@ -52,7 +52,7 @@ export class RankService {
     const percentileStandards =
       await this.prisma.fitness_percentile_standard.findMany({
         where: {
-          gender: member.gender,
+          gender: member.gender === 'male' ? 'M' : 'F',
           min_age: ageRange.min,
           max_age: ageRange.max,
         },
