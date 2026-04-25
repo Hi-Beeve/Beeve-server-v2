@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { PhoneVerificationService } from './phone-verification.service';
 import { SmsService } from '../sms/sms.service';
@@ -15,6 +16,7 @@ import {
   VerifyCodeDto,
   SignupDto,
   LoginDto,
+  EmailLoginDto,
 } from './dto';
 
 @Injectable()
@@ -41,6 +43,24 @@ export class AuthService {
         code: 'AUTH201',
         message: '유효하지 않은 전화번호 형식입니다.',
       });
+    }
+
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5분 후
+
+    // 심사용 번호 우회 처리 (rate limit / SMS 발송 스킵)
+    const reviewPhone = this.configService.get<string>('REVIEW_TEST_PHONE');
+    if (reviewPhone && phoneNumber === reviewPhone) {
+      const reviewCode = this.configService.get<string>('REVIEW_TEST_CODE') || '000000';
+      await this.phoneVerificationService.saveVerificationCode(phoneNumber, reviewCode);
+      this.logger.log(`Review phone bypass: code saved for ${phoneNumber}`);
+      return {
+        isSuccess: true,
+        message: '인증번호가 발송되었습니다.',
+        data: {
+          expiresAt: expiresAt.toISOString(),
+          remainingAttempts: 5,
+        },
+      };
     }
 
     // 1분 제한 체크
@@ -80,8 +100,6 @@ export class AuthService {
 
     // Redis에 저장
     await this.phoneVerificationService.saveVerificationCode(phoneNumber, code);
-
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5분 후
 
     return {
       isSuccess: true,
@@ -307,6 +325,51 @@ export class AuthService {
     const tokens = await this.generateTokens(member.member_id);
 
     // Refresh Token 저장 (기존 것 덮어쓰기)
+    await this.saveRefreshToken(member.member_id, tokens.refreshToken);
+
+    return {
+      isSuccess: true,
+      data: {
+        accessToken: tokens.accessToken,
+        tokenType: 'Bearer',
+        refreshToken: tokens.refreshToken,
+        expiresIn: this.getExpiresInSeconds('JWT_ACCESS_EXPIRATION'),
+        scope: 'read write',
+        refreshTokenExpiresIn: this.getExpiresInSeconds('JWT_REFRESH_EXPIRATION'),
+        name: member.name,
+        profileUrl: member.profile_url,
+      },
+    };
+  }
+
+  /**
+   * 이메일/비밀번호 로그인 (심사용)
+   */
+  async loginWithEmail(dto: EmailLoginDto) {
+    const { email, password } = dto;
+
+    const member = await this.prisma.member.findFirst({
+      where: { email, deleted_yn: 'N' },
+    });
+
+    if (!member || !member.password) {
+      throw new UnauthorizedException({
+        isSuccess: false,
+        code: 'AUTH301',
+        message: '이메일 또는 비밀번호가 올바르지 않습니다.',
+      });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, member.password);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException({
+        isSuccess: false,
+        code: 'AUTH301',
+        message: '이메일 또는 비밀번호가 올바르지 않습니다.',
+      });
+    }
+
+    const tokens = await this.generateTokens(member.member_id);
     await this.saveRefreshToken(member.member_id, tokens.refreshToken);
 
     return {

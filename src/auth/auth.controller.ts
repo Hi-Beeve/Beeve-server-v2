@@ -18,6 +18,7 @@ import {
   VerifyCodeDto,
   SignupDto,
   LoginDto,
+  EmailLoginDto,
   RefreshTokenDto,
   LogoutDto,
 } from './dto';
@@ -92,6 +93,19 @@ export class AuthController {
   @ApiResponse({ status: 401, description: '가입되지 않은 사용자' })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  /**
+   * 이메일/비밀번호 로그인 (심사용)
+   */
+  @Post('email-login')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '이메일/비밀번호 로그인 (앱 심사용)' })
+  @ApiResponse({ status: 200, description: '로그인 성공' })
+  @ApiResponse({ status: 401, description: '이메일 또는 비밀번호 불일치' })
+  emailLogin(@Body() dto: EmailLoginDto) {
+    return this.authService.loginWithEmail(dto);
   }
 
   /**
