@@ -407,7 +407,7 @@ export class FitnessService {
         fitness_result: true,
       },
       orderBy: {
-        measure_day: 'desc',
+        measure_day: 'asc',
       },
     });
 
