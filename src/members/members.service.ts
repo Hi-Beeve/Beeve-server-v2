@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpdateAiConsentDto } from './dto/update-ai-consent.dto';
 
 @Injectable()
 export class MembersService {
@@ -42,6 +43,7 @@ export class MembersService {
         weight: true,
         bmi: true,
         profile_url: true,
+        ai_consent: true,
       },
     });
 
@@ -62,7 +64,32 @@ export class MembersService {
         weight: member.weight ? Number(member.weight) : null,
         bmi: member.bmi ? Number(member.bmi) : null,
         profileUrl: member.profile_url,
+        aiConsent: member.ai_consent ?? false,
       },
+    };
+  }
+
+  async updateAiConsent(memberId: bigint, dto: UpdateAiConsentDto) {
+    const member = await this.prismaService.member.findUnique({
+      where: { member_id: memberId },
+    });
+
+    if (!member) {
+      throw new NotFoundException('사용자를 찾을 수 없습니다.');
+    }
+
+    await this.prismaService.member.update({
+      where: { member_id: memberId },
+      data: {
+        ai_consent: dto.aiConsent,
+        updated_at: new Date(),
+      },
+    });
+
+    return {
+      isSuccess: true,
+      code: 'MEMBER200',
+      data: { aiConsent: dto.aiConsent },
     };
   }
 

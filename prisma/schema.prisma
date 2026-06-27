@@ -77,6 +77,7 @@ model member {
   member_id                 BigInt                      @id @default(autoincrement())
   email                     String                      @db.VarChar
   password                  String?                     @db.VarChar
+  ai_consent                Boolean?                    @default(false)
   name                      String?                     @db.VarChar
   birth_date                DateTime?                   @db.Date
   gender                    String                      @db.VarChar
